@@ -20,8 +20,15 @@
     uniform vec3 uCamPos;
     uniform float uFogStart;
     uniform float uFogEnd;
+    uniform float uTime;
+    uniform float uWater;   // 1.0 when drawing the water pass
     void main() {
       vec3 world = aPos + uChunkOrigin;
+      // Gentle sinusoidal waves on water surfaces.
+      if (uWater > 0.5) {
+        world.y += sin(uTime * 1.6 + world.x * 0.7 + world.z * 0.7) * 0.05
+                 + cos(uTime * 1.1 + world.x * 0.3 - world.z * 0.5) * 0.04;
+      }
       gl_Position = uViewProj * vec4(world, 1.0);
       vUV = aUV;
       vLight = aLight * aAO;
@@ -97,5 +104,29 @@
       gl_FragColor = vec4(c, 1.0);
     }`;
 
-  MC.Shaders = { voxelVS, voxelFS, skyVS, skyFS, entVS, entFS };
+  // Celestial shader: points rendered at infinity (sun, moon, stars).
+  const celVS = `
+    attribute vec3 aPos;
+    uniform mat4 uViewRot;   // projection * rotation-only view
+    uniform float uPointSize;
+    void main() {
+      vec4 p = uViewRot * vec4(aPos, 1.0);
+      p.z = p.w * 0.99999;   // force to the far plane (behind terrain)
+      gl_Position = p;
+      gl_PointSize = uPointSize;
+    }`;
+
+  const celFS = `
+    precision mediump float;
+    uniform vec4 uColor;
+    uniform float uRound;    // 1.0 = soft disc, 0.0 = square
+    void main() {
+      vec2 d = gl_PointCoord - 0.5;
+      float r = length(d);
+      if (uRound > 0.5 && r > 0.5) discard;
+      float a = uColor.a * (uRound > 0.5 ? smoothstep(0.5, 0.32, r) : 1.0);
+      gl_FragColor = vec4(uColor.rgb, a);
+    }`;
+
+  MC.Shaders = { voxelVS, voxelFS, skyVS, skyFS, entVS, entFS, celVS, celFS };
 })(typeof window !== 'undefined' ? window : this);

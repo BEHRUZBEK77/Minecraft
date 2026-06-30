@@ -392,11 +392,15 @@
       }
     }
 
-    /** Spawn animals by day / monsters by night near the player. */
+    /** Spawn animals by day / monsters by night + in dark caves near the player. */
     _trySpawn(day) {
       const night = day < 0.3;
-      const cap = night ? 16 : 12;
+      const cap = night ? 18 : 14;
       if (this.mobs.length >= cap) return;
+
+      // Always attempt cave spawns (monsters spawn in darkness, day or night).
+      if (Math.random() < 0.5 && this._trySpawnCave()) return;
+
       const angle = Math.random() * Math.PI * 2;
       const dist = 16 + Math.random() * 16;
       const x = Math.floor(this.player.pos[0] + Math.cos(angle) * dist);
@@ -418,15 +422,49 @@
       }
     }
 
+    /**
+     * Try to spawn a hostile mob in a dark underground pocket near the player.
+     * @returns {boolean} true if a mob was spawned.
+     */
+    _trySpawnCave() {
+      const px = this.player.pos[0], py = this.player.pos[1], pz = this.player.pos[2];
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const x = Math.floor(px + (Math.random() - 0.5) * 36);
+        const z = Math.floor(pz + (Math.random() - 0.5) * 36);
+        const y = Math.floor(4 + Math.random() * Math.min(py - 4, MC.World.SEA_LEVEL));
+        if (y < 3) continue;
+        // Need a 2-tall air gap with a solid floor — and genuine darkness.
+        const floor = this.world.getBlock(x, y - 1, z);
+        const feet = this.world.getBlock(x, y, z);
+        const head = this.world.getBlock(x, y + 1, z);
+        if (!Blocks.isSolid(floor) || feet !== Blocks.ID.AIR || head !== Blocks.ID.AIR) continue;
+        if (this.world.getLight(x, y, z) > 7) continue;   // too bright
+        const pos = [x + 0.5, y, z + 0.5];
+        const t = MC.Monsters.TYPES[(Math.random() * MC.Monsters.TYPES.length) | 0];
+        this.mobs.push(MC.Monsters.create(this.world, pos, t));
+        return true;
+      }
+      return false;
+    }
+
     /* ---------------- Rendering ---------------- */
     _render() {
       const sky = this._skyState();
       this.camera.update(this.aspect);
       this.renderer.dayLight = sky.dayLight;
+      this.renderer.time = (this.renderer.time || 0) + 0.016;
       this.renderer.fogColor = sky.bot.map((c, i) => MC.math.lerp(c, sky.top[i], 0.3));
 
       this.renderer.clear();
       this.renderer.drawSky(sky.top, sky.bot);
+
+      // Sun / moon / stars.
+      const sunAngle = (this.time - 0.25) * Math.PI * 2;
+      const nrm = MC.math.vec3.normalize;
+      const sunDir = nrm([Math.cos(sunAngle), Math.sin(sunAngle), 0.3]);
+      const moonDir = nrm([-Math.cos(sunAngle), -Math.sin(sunAngle), 0.3]);
+      const nightFactor = MC.math.clamp(1 - sky.day * 2.2, 0, 1);
+      this.renderer.drawCelestial(this.camera, sunDir, moonDir, nightFactor);
 
       const visible = this.chunks ? this.chunks.render(this.camera) : 0;
 

@@ -15,39 +15,42 @@
 
   // Face definitions: direction normal + 4 corner offsets (CCW) + AO sample sets.
   // Order: corners listed so triangles (0,1,2)+(0,2,3) are CCW when viewed from outside.
+  // Per-face brightness so cubes read as lit from above (classic voxel look).
+  const FACE_SHADE = { px: 0.72, nx: 0.72, py: 1.0, ny: 0.5, pz: 0.86, nz: 0.6 };
+
   const FACES = [
     { // +X (right)
-      dir: [1, 0, 0], uvFace: 'side',
+      dir: [1, 0, 0], uvFace: 'side', shade: FACE_SHADE.px,
       corners: [[1, 0, 1], [1, 0, 0], [1, 1, 0], [1, 1, 1]],
       ao: [[[1, -1, 0], [1, 0, 1], [1, -1, 1]], [[1, -1, 0], [1, 0, -1], [1, -1, -1]],
       [[1, 1, 0], [1, 0, -1], [1, 1, -1]], [[1, 1, 0], [1, 0, 1], [1, 1, 1]]],
     },
     { // -X (left)
-      dir: [-1, 0, 0], uvFace: 'side',
+      dir: [-1, 0, 0], uvFace: 'side', shade: FACE_SHADE.nx,
       corners: [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]],
       ao: [[[-1, -1, 0], [-1, 0, -1], [-1, -1, -1]], [[-1, -1, 0], [-1, 0, 1], [-1, -1, 1]],
       [[-1, 1, 0], [-1, 0, 1], [-1, 1, 1]], [[-1, 1, 0], [-1, 0, -1], [-1, 1, -1]]],
     },
     { // +Y (top)
-      dir: [0, 1, 0], uvFace: 'top',
+      dir: [0, 1, 0], uvFace: 'top', shade: FACE_SHADE.py,
       corners: [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]],
       ao: [[[0, 1, 1], [-1, 1, 0], [-1, 1, 1]], [[0, 1, 1], [1, 1, 0], [1, 1, 1]],
       [[0, 1, -1], [1, 1, 0], [1, 1, -1]], [[0, 1, -1], [-1, 1, 0], [-1, 1, -1]]],
     },
     { // -Y (bottom)
-      dir: [0, -1, 0], uvFace: 'bottom',
+      dir: [0, -1, 0], uvFace: 'bottom', shade: FACE_SHADE.ny,
       corners: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],
       ao: [[[0, -1, -1], [-1, -1, 0], [-1, -1, -1]], [[0, -1, -1], [1, -1, 0], [1, -1, -1]],
       [[0, -1, 1], [1, -1, 0], [1, -1, 1]], [[0, -1, 1], [-1, -1, 0], [-1, -1, 1]]],
     },
     { // +Z (front)
-      dir: [0, 0, 1], uvFace: 'side',
+      dir: [0, 0, 1], uvFace: 'side', shade: FACE_SHADE.pz,
       corners: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],
       ao: [[[0, -1, 1], [-1, 0, 1], [-1, -1, 1]], [[0, -1, 1], [1, 0, 1], [1, -1, 1]],
       [[0, 1, 1], [1, 0, 1], [1, 1, 1]], [[0, 1, 1], [-1, 0, 1], [-1, 1, 1]]],
     },
     { // -Z (back)
-      dir: [0, 0, -1], uvFace: 'side',
+      dir: [0, 0, -1], uvFace: 'side', shade: FACE_SHADE.nz,
       corners: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]],
       ao: [[[0, -1, -1], [1, 0, -1], [1, -1, -1]], [[0, -1, -1], [-1, 0, -1], [-1, -1, -1]],
       [[0, 1, -1], [-1, 0, -1], [-1, 1, -1]], [[0, 1, -1], [1, 0, -1], [1, 1, -1]]],
@@ -119,7 +122,8 @@
     const uvCoords = [[uv[0], uv[3]], [uv[2], uv[3]], [uv[2], uv[1]], [uv[0], uv[1]]];
     // Light sampled from the neighbor cell this face looks into.
     const lnx = wx + face.dir[0], lny = wy + face.dir[1], lnz = wz + face.dir[2];
-    const lightVal = world.getLight(lnx, lny, lnz) / 15;
+    // Combine the neighbor cell's light with a fixed per-face directional shade.
+    const lightVal = (world.getLight(lnx, lny, lnz) / 15) * face.shade;
     const aoVals = [];
     for (let i = 0; i < 4; i++) {
       const a = face.ao[i];

@@ -35,13 +35,15 @@
     update(px, pz) {
       const [pcx, pcz] = ChunkManager.chunkCoord(px, pz);
       const R = this.renderDistance;
-      // Generate missing chunks nearest-first within budget.
+      // Generate one ring beyond the render distance so the outer visible ring has
+      // neighbors and can be meshed (otherwise the edge stays invisible).
+      const G = R + 1;
       let builds = 0;
       const candidates = [];
-      for (let dz = -R; dz <= R; dz++) {
-        for (let dx = -R; dx <= R; dx++) {
+      for (let dz = -G; dz <= G; dz++) {
+        for (let dx = -G; dx <= G; dx++) {
           const cx = pcx + dx, cz = pcz + dz;
-          if (dx * dx + dz * dz > R * R) continue;
+          if (dx * dx + dz * dz > G * G) continue;
           if (!this.world.hasChunk(cx, cz)) candidates.push([dx * dx + dz * dz, cx, cz]);
         }
       }
@@ -158,8 +160,10 @@
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.depthMask(false);
+      this.renderer.setWaterPass(true);
       for (const chunk of visible)
         this.renderer.drawChunkMesh(chunk.waterMesh, chunk.cx * SIZE_X, chunk.cz * SIZE_Z, 0.72);
+      this.renderer.setWaterPass(false);
       gl.depthMask(true);
       gl.disable(gl.BLEND);
       return visible.length;

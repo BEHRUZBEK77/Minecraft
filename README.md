@@ -36,13 +36,19 @@ are no external assets to load.
   beaches, seas, 3D-noise caves, ore distribution and trees.
 - **Chunks:** 16×128×16 chunks streamed around the player with budgeted generation,
   meshing and unloading. Includes both a culled mesher and a greedy mesher.
-- **Lighting:** flood-fill skylight + block light (torches) with ambient occlusion.
+- **Lighting:** flood-fill skylight + block light (torches), ambient occlusion, and
+  per-face directional shading (bright tops, darker sides) for a true 3D look.
+- **Sky:** animated day/night gradient with a sun, a moon, and a 500-point starfield.
+- **Water:** transparent, blended, with sinusoidal wave displacement in the shader.
 - **Gameplay:** breaking (hardness + progress + particles), placing (face-aware,
   collision-checked), block drops, survival health/hunger with fall & starvation
   damage, creative mode with flight.
 - **Physics:** gravity, swept AABB collision, jumping, swimming, auto-step for mobs.
 - **Entities:** passive animals (cow, pig, chicken, sheep) and hostile mobs
-  (zombie, skeleton, spider) with wander/chase/attack AI, day/night spawning.
+  (zombie, skeleton, spider) with wander/chase/attack AI. Monsters spawn at night
+  *and* in dark underground caves; animals spawn on grass by day.
+- **Infinite world:** chunks are streamed endlessly in every direction around the
+  player — there is no world border; only nearby chunks stay in memory.
 - **Inventory & crafting:** hotbar, stacking, drag-and-drop, 2×2 and 3×3 recipes.
 - **Day/night:** animated sky gradient, sun/moon-driven light level, in-game clock.
 - **Weather:** clear / rain / storm with overlay particles and ambient audio.

@@ -29,11 +29,14 @@
       this.prog = this._program(MC.Shaders.voxelVS, MC.Shaders.voxelFS);
       this.skyProg = this._program(MC.Shaders.skyVS, MC.Shaders.skyFS);
       this.entProg = this._program(MC.Shaders.entVS, MC.Shaders.entFS);
+      this.celProg = this._program(MC.Shaders.celVS, MC.Shaders.celFS);
       this._cacheLocations();
       this._uploadAtlas();
       this._initSky();
       this._initOutline();
       this._initCube();
+      this._initCelestial();
+      this.time = 0;
       this.fogColor = [0.6, 0.75, 0.95];
       this.dayLight = 1.0;
     }
@@ -74,6 +77,8 @@
         uFogColor: gl.getUniformLocation(p, 'uFogColor'),
         uDayLight: gl.getUniformLocation(p, 'uDayLight'),
         uAlpha: gl.getUniformLocation(p, 'uAlpha'),
+        uTime: gl.getUniformLocation(p, 'uTime'),
+        uWater: gl.getUniformLocation(p, 'uWater'),
       };
       this.skyLoc = {
         aPos: gl.getAttribLocation(this.skyProg, 'aPos'),
@@ -94,6 +99,88 @@
         uFogColor: gl.getUniformLocation(e, 'uFogColor'),
         uDayLight: gl.getUniformLocation(e, 'uDayLight'),
       };
+      const cl = this.celProg;
+      this.celLoc = {
+        aPos: gl.getAttribLocation(cl, 'aPos'),
+        uViewRot: gl.getUniformLocation(cl, 'uViewRot'),
+        uPointSize: gl.getUniformLocation(cl, 'uPointSize'),
+        uColor: gl.getUniformLocation(cl, 'uColor'),
+        uRound: gl.getUniformLocation(cl, 'uRound'),
+      };
+    }
+
+    /** Generate a fixed starfield (points on the upper hemisphere). */
+    _initCelestial() {
+      const gl = this.gl;
+      const N = 500;
+      const verts = new Float32Array(N * 3);
+      let seed = 9281;
+      const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+      for (let i = 0; i < N; i++) {
+        // Uniform-ish points on a sphere, biased to upper half.
+        const theta = rnd() * Math.PI * 2;
+        const y = rnd();                      // 0..1 keeps stars above horizon
+        const r = Math.sqrt(1 - y * y);
+        verts[i * 3] = Math.cos(theta) * r;
+        verts[i * 3 + 1] = y;
+        verts[i * 3 + 2] = Math.sin(theta) * r;
+      }
+      this.starBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.starBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+      this.starCount = N;
+      this._viewRot = new Float32Array(16);
+    }
+
+    /**
+     * Draw sun, moon and stars. Directions are unit vectors; nightFactor 0..1
+     * controls star/moon visibility.
+     * @param {Camera} camera
+     * @param {number[]} sunDir
+     * @param {number[]} moonDir
+     * @param {number} nightFactor
+     */
+    drawCelestial(camera, sunDir, moonDir, nightFactor) {
+      const gl = this.gl, l = this.celLoc;
+      // projection * (view with translation removed) so bodies sit at infinity.
+      const v = camera.view, vr = this._viewRot;
+      vr.set(v); vr[12] = 0; vr[13] = 0; vr[14] = 0;
+      const m = new Float32Array(16);
+      MC.math.mat4.multiply(m, camera.proj, vr);
+
+      gl.useProgram(this.celProg);
+      gl.uniformMatrix4fv(l.uViewRot, false, m);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+
+      // Stars (night only).
+      if (nightFactor > 0.01) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.starBuf);
+        gl.enableVertexAttribArray(l.aPos);
+        gl.vertexAttribPointer(l.aPos, 3, gl.FLOAT, false, 0, 0);
+        gl.uniform1f(l.uPointSize, 2.0);
+        gl.uniform1f(l.uRound, 0.0);
+        gl.uniform4f(l.uColor, 1, 1, 1, nightFactor);
+        gl.drawArrays(gl.POINTS, 0, this.starCount);
+        gl.disableVertexAttribArray(l.aPos);
+      }
+
+      // Sun + moon as single soft discs.
+      gl.uniform1f(l.uRound, 1.0);
+      const disc = (dir, size, r, g, b, a) => {
+        if (dir[1] < -0.15 || a <= 0) return;     // below horizon: skip
+        gl.disableVertexAttribArray(l.aPos);
+        gl.vertexAttrib3f(l.aPos, dir[0], dir[1], dir[2]);
+        gl.uniform1f(l.uPointSize, size);
+        gl.uniform4f(l.uColor, r, g, b, a);
+        gl.drawArrays(gl.POINTS, 0, 1);
+      };
+      disc(sunDir, 70, 1.0, 0.95, 0.7, 1.0);
+      disc(moonDir, 48, 0.85, 0.88, 0.95, Math.max(0.4, nightFactor));
+
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
     }
 
     /** Build a unit cube (positions + normals) for entity rendering. */
@@ -183,9 +270,11 @@
         0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0,
         0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1,
       ];
+      // Expand the cube slightly past block bounds to avoid z-fighting with faces.
+      const expanded = e.map((v) => (v === 0 ? -0.004 : 1.004));
       this.outlineBuf = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, this.outlineBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(e), gl.STATIC_DRAW);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(expanded), gl.STATIC_DRAW);
       this.outlineCount = e.length / 3;
     }
 
@@ -257,7 +346,12 @@
       gl.uniform1f(this.loc.uFogEnd, fogEnd);
       gl.uniform3fv(this.loc.uFogColor, this.fogColor);
       gl.uniform1f(this.loc.uDayLight, this.dayLight);
+      gl.uniform1f(this.loc.uTime, this.time || 0);
+      gl.uniform1f(this.loc.uWater, 0);
     }
+
+    /** Toggle the water-wave path of the voxel vertex shader. */
+    setWaterPass(on) { this.gl.uniform1f(this.loc.uWater, on ? 1 : 0); }
 
     /** Draw a single chunk mesh at its world origin. */
     drawChunkMesh(mesh, originX, originZ, alpha = 1) {
@@ -285,9 +379,10 @@
     drawOutline(camera, x, y, z) {
       const gl = this.gl, loc = this.loc;
       gl.useProgram(this.prog);
-      gl.uniform3f(loc.uChunkOrigin, x - 0.002, y - 0.002, z - 0.002);
+      gl.uniform3f(loc.uChunkOrigin, x, y, z);
       gl.uniform1f(loc.uAlpha, 1);
-      gl.uniform1f(loc.uDayLight, 0); // outline rendered dark via light=0 + tex black? use lines
+      gl.uniform1f(loc.uWater, 0);
+      gl.uniform1f(loc.uDayLight, 0); // light=0 renders the wireframe dark
       gl.bindBuffer(gl.ARRAY_BUFFER, this.outlineBuf);
       gl.enableVertexAttribArray(loc.aPos);
       gl.vertexAttribPointer(loc.aPos, 3, gl.FLOAT, false, 0, 0);
