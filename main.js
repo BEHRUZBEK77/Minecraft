@@ -48,10 +48,91 @@
       this._fps = 0; this._frames = 0; this._fpsTime = 0;
       this._last = performance.now();
 
+      // Player-facing settings (persisted).
+      this.settings = { renderDistance: 7, fov: 70, volume: 60, music: true, mobs: true, smooth: true, greedy: false };
+
       this._bindUI();
+      this._bindSettings();
       this._resize();
       addEventListener('resize', () => this._resize());
+      // Load + apply persisted settings even before a world is started.
+      this.save.loadMeta('settings').then((s) => { if (s) Object.assign(this.settings, s); this._syncSettingsUI(); this.applySettings(); });
     }
+
+    /* ---------------- Settings ---------------- */
+    _bindSettings() {
+      const $ = (id) => document.getElementById(id);
+      const open = () => { this._settingsReturn = this.paused ? 'pause' : 'main';
+        $('mainMenu').style.display = 'none'; $('pauseMenu').style.display = 'none';
+        $('settingsMenu').style.display = 'flex'; this._syncSettingsUI(); };
+      const close = () => {
+        $('settingsMenu').style.display = 'none';
+        if (this._settingsReturn === 'pause') $('pauseMenu').style.display = 'flex';
+        else $('mainMenu').style.display = 'flex';
+      };
+      if ($('btnSettingsMain')) $('btnSettingsMain').onclick = open;
+      if ($('btnSettingsPause')) $('btnSettingsPause').onclick = open;
+      if ($('btnSettingsBack')) $('btnSettingsBack').onclick = () => { this.saveSettings(); close(); };
+
+      const bind = (id, key, label, fn) => {
+        const el = $(id); if (!el) return;
+        el.oninput = () => {
+          const v = el.type === 'checkbox' ? el.checked : Number(el.value);
+          this.settings[key] = v;
+          if (label) $(label).textContent = v;
+          this.applySettings();
+        };
+      };
+      bind('setRender', 'renderDistance', 'rdVal');
+      bind('setFov', 'fov', 'fovVal');
+      bind('setVol', 'volume', 'volVal');
+      bind('setMusic', 'music');
+      bind('setMobs', 'mobs');
+      bind('setSmooth', 'smooth');
+      if ($('btnPresetFast')) $('btnPresetFast').onclick = () => this._applyPreset('fast');
+      if ($('btnPresetNice')) $('btnPresetNice').onclick = () => this._applyPreset('nice');
+    }
+
+    /** Apply a performance preset and refresh the UI. */
+    _applyPreset(kind) {
+      if (kind === 'fast') Object.assign(this.settings, { renderDistance: 4, smooth: false, greedy: true });
+      else Object.assign(this.settings, { renderDistance: 8, smooth: true, greedy: false });
+      this._syncSettingsUI();
+      this.applySettings();
+    }
+
+    /** Push current settings values into the DOM controls. */
+    _syncSettingsUI() {
+      const $ = (id) => document.getElementById(id);
+      const s = this.settings;
+      const set = (id, val, label) => { const e = $(id); if (!e) return; if (e.type === 'checkbox') e.checked = val; else e.value = val; if (label && $(label)) $(label).textContent = val; };
+      set('setRender', s.renderDistance, 'rdVal');
+      set('setFov', s.fov, 'fovVal');
+      set('setVol', s.volume, 'volVal');
+      set('setMusic', s.music);
+      set('setMobs', s.mobs);
+      set('setSmooth', s.smooth);
+    }
+
+    /** Apply settings to the live engine (called whenever a value changes). */
+    applySettings() {
+      const s = this.settings;
+      this.camera.fov = s.fov * Math.PI / 180;
+      this.audio.setVolume(s.volume / 100);
+      this.audio.setMusicEnabled(s.music);
+      const aoChanged = MC.Mesher.useAO !== s.smooth;
+      MC.Mesher.useAO = s.smooth;
+      if (this.chunks) {
+        const greedyChanged = this.chunks.useGreedy !== s.greedy;
+        this.chunks.useGreedy = s.greedy;
+        this.chunks.renderDistance = s.renderDistance;
+        // Remesh everything if the look of meshes changed.
+        if ((aoChanged || greedyChanged) && this.world)
+          for (const c of this.world.chunks.values()) c.dirty = true;
+      }
+    }
+
+    async saveSettings() { await this.save.saveMeta('settings', this.settings); }
 
     _resize() {
       this.aspect = this.renderer.resize();
@@ -76,6 +157,8 @@
       addEventListener('keydown', (e) => {
         if (!this.started) return;
         if (e.code === 'Escape') {
+          const settingsEl = document.getElementById('settingsMenu');
+          if (settingsEl && settingsEl.style.display === 'flex') { this.saveSettings(); document.getElementById('btnSettingsBack').click(); return; }
           if (this.ui.furnaceOpen) { this.ui.closeFurnace(); this.input.lock(); }
           else if (this.ui.invOpen) { this.ui.closeInventory(); this.input.lock(); }
           else if (this.paused) this.resume();
@@ -108,7 +191,8 @@
       const seed = meta?.seed ?? ((Math.random() * 1e9) | 0);
       this.world = new MC.World(seed);
       this.player = new MC.Player(this.camera, this.world);
-      this.chunks = new MC.ChunkManager(this.world, this.renderer, { renderDistance: 7 });
+      this.chunks = new MC.ChunkManager(this.world, this.renderer, { renderDistance: this.settings.renderDistance });
+      this.applySettings();
 
       // Hook chunk save/load through the manager.
       this._savedKeys = await this.save.loadChunkKeys();
@@ -136,11 +220,17 @@
         else this.inventory.giveStarter();
       }
 
-      // Pre-generate spawn area for a smooth start.
-      await this._preloadSpawn();
+      // Decide where to load chunks: saved player position, or a fresh land spawn.
+      if (!meta) { this.player.pos = this._findSpawn(); this.spawnPoint = this.player.pos.slice(); }
+      else this.spawnPoint = (this.player.pos || [0, 80, 0]).slice();
 
-      // Drop the player onto the surface at spawn.
-      if (!meta) this._placePlayerAtSurface();
+      // Pre-generate the area around the player before play begins.
+      const [scx, scz] = MC.ChunkManager.chunkCoord(this.player.pos[0], this.player.pos[2]);
+      await this._preloadSpawn(scx, scz);
+
+      // Snap the player onto the actual generated surface (avoids spawning in
+      // the void or buried in the ground).
+      this._snapToGround();
 
       this.ui.hideLoading();
       this.started = true;
@@ -152,14 +242,14 @@
       requestAnimationFrame((t) => this._loop(t));
     }
 
-    /** Generate the chunks immediately around spawn before play begins. */
-    async _preloadSpawn() {
+    /** Generate the chunks around a center chunk before play begins. */
+    async _preloadSpawn(ccx, ccz) {
       const R = 4;
       const total = (R * 2 + 1) ** 2;
       let done = 0;
       for (let dz = -R; dz <= R; dz++) {
         for (let dx = -R; dx <= R; dx++) {
-          const c = new MC.Chunk(dx, dz);
+          const c = new MC.Chunk(ccx + dx, ccz + dz);
           this.world.generate(c);
           MC.Lighting.compute(c);
           this.world.addChunk(c);
@@ -171,12 +261,42 @@
       for (const c of this.world.chunks.values()) this.chunks._remesh(c);
     }
 
-    /** Find a safe surface Y at the player's spawn column. */
-    _placePlayerAtSurface() {
-      const x = 8, z = 8;
+    /**
+     * Find a fresh spawn over solid land above sea level using the procedural
+     * heightmap (no chunks needed yet). Spirals outward from the origin.
+     * @returns {number[]} [x,y,z] feet position
+     */
+    _findSpawn() {
+      for (let r = 0; r < 400; r += 3) {
+        for (let a = 0; a < Math.PI * 2; a += r === 0 ? 7 : 0.35) {
+          const x = Math.round(Math.cos(a) * r), z = Math.round(Math.sin(a) * r);
+          const h = this.world.surfaceHeight(x, z);
+          const biome = this.world.biomeAt(x, z, h);
+          if (h > MC.World.SEA_LEVEL && biome.name !== 'Mountain Peaks')
+            return [x + 0.5, h + 2, z + 0.5];
+        }
+      }
+      return [0.5, this.world.surfaceHeight(0, 0) + 2, 0.5];
+    }
+
+    /** Snap the player onto the highest solid (non-leaf) block at their column. */
+    _snapToGround() {
+      const x = Math.floor(this.player.pos[0]), z = Math.floor(this.player.pos[2]);
       let y = MC.CHUNK.SIZE_Y - 1;
-      while (y > 0 && this.world.getBlock(x, y, z) === Blocks.ID.AIR) y--;
-      this.player.pos = [x + 0.5, y + 1, z + 0.5];
+      while (y > 1) {
+        const id = this.world.getBlock(x, y, z);
+        if (Blocks.isSolid(id) && id !== Blocks.ID.LEAVES) break;
+        y--;
+      }
+      this.player.pos = [x + 0.5, y + 1.1, z + 0.5];
+      this.player.vel = [0, 0, 0];
+    }
+
+    /** True once the chunk under the player exists and is generated. */
+    _groundReady() {
+      const [cx, cz] = MC.ChunkManager.chunkCoord(this.player.pos[0], this.player.pos[2]);
+      const c = this.world.getChunk(cx, cz);
+      return !!(c && c.generated);
     }
 
     pause() {
@@ -194,7 +314,8 @@
     respawn() {
       this.player.health = this.player.maxHealth;
       this.player.hunger = this.player.maxHunger;
-      this._placePlayerAtSurface();
+      this.player.pos = (this.spawnPoint || this._findSpawn()).slice();
+      this._snapToGround();
       this.player.vel = [0, 0, 0];
       this.ui.hideDeath();
       this.resume();
@@ -224,6 +345,10 @@
       // Day/night advance.
       this.time = (this.time + dt / DAY_LENGTH) % 1;
       this._updateWeather(dt);
+
+      // Freeze the player (no gravity) until the ground beneath has loaded, so
+      // they never fall through unloaded chunks into the void.
+      this.player.frozen = !this._groundReady();
 
       // Player.
       this.player.update(this.input, dt);
@@ -263,7 +388,10 @@
 
     /** Break (hold) / place (click) blocks via raycast. */
     _handleInteraction(dt) {
-      const hit = this.player.raycast();
+      const sel = this.inventory.selectedItem;
+      const heldId = sel ? sel.id : 0;
+      const reach = MC.Tools.isTool(heldId) ? MC.Tools.reach(heldId) : MC.Player.REACH;
+      const hit = this.player.raycast(reach);
       this._target = hit;
 
       // Left mouse: breaking.
@@ -274,7 +402,8 @@
         if (!this._breaking || this._breaking.key !== key) {
           this._breaking = { key, x: hit.x, y: hit.y, z: hit.z, progress: 0 };
         }
-        const rate = this.player.gameMode === 'creative' ? 100 : 1 / Math.max(0.2, def.hardness);
+        const toolMul = MC.Tools.mineSpeed(heldId, hit.id);
+        const rate = (this.player.gameMode === 'creative' ? 100 : 1 / Math.max(0.2, def.hardness)) * toolMul;
         this._breaking.progress += rate * dt;
         if (this._breaking.progress >= 1) {
           this._breakBlock(hit);
@@ -411,7 +540,7 @@
       const sky = this._skyState();
       if (this._spawnTimer <= 0) {
         this._spawnTimer = 4;
-        this._trySpawn(sky.day);
+        if (this.settings.mobs) this._trySpawn(sky.day);
       }
       for (const m of this.mobs) m.update(dt, this.player);
       // Remove dead / far mobs.
@@ -428,7 +557,10 @@
     _tryAttackMob() {
       const eye = this.player.eyePosition();
       const dir = this.camera.forward();
-      let best = null, bestT = 4;
+      const sel = this.inventory.selectedItem;
+      const heldId = sel ? sel.id : 0;
+      const damage = MC.Tools.attack(heldId);
+      let best = null, bestT = MC.Tools.isTool(heldId) ? MC.Tools.reach(heldId) : 4;
       for (const m of this.mobs) {
         const cx = m.pos[0], cy = m.pos[1] + m.height / 2, cz = m.pos[2];
         const ex = cx - eye[0], ey = cy - eye[1], ez = cz - eye[2];
@@ -439,7 +571,7 @@
         if (d2 < (m.half + 0.5) ** 2) { best = m; bestT = t; }
       }
       if (best) {
-        best.damage(4);
+        best.damage(damage);
         this.audio.mob(best.type);
         // Knockback.
         const dx = best.pos[0] - eye[0], dz = best.pos[2] - eye[2];

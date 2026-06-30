@@ -13,6 +13,7 @@
       this.master = null;
       this.musicGain = null;
       this.enabled = true;
+      this.musicOn = true;
       this.volume = 0.6;
       this._rainNode = null;
       this._stepTimer = 0;
@@ -92,29 +93,59 @@
     }
 
     /** Play a slow ambient chord progression as background music. */
+    /**
+     * Calm, generative ambient music: a slow chord pad underneath a gentle
+     * pentatonic melody, in the spirit of Minecraft's quiet piano pieces.
+     */
     startMusic() {
-      if (!this.ctx || !this.enabled || this._music) return;
-      const chords = [[220, 277, 330], [196, 247, 294], [174, 220, 261], [233, 294, 349]];
-      let i = 0;
-      const playChord = () => {
-        if (!this._music) return;
-        const c = chords[i % chords.length]; i++;
-        for (const f of c) {
-          const o = this.ctx.createOscillator();
-          const g = this.ctx.createGain();
-          o.type = 'sine'; o.frequency.value = f;
-          g.gain.setValueAtTime(0, this.ctx.currentTime);
-          g.gain.linearRampToValueAtTime(0.5, this.ctx.currentTime + 1.5);
-          g.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 5);
-          o.connect(g); g.connect(this.musicGain);
-          o.start(); o.stop(this.ctx.currentTime + 5.2);
-        }
+      if (!this.ctx || !this.enabled || !this.musicOn || this._music) return;
+      // Chord progression (root triads) in a warm key.
+      const chords = [
+        [130.81, 164.81, 196.00],  // C
+        [110.00, 138.59, 164.81],  // A min
+        [146.83, 174.61, 220.00],  // D min
+        [196.00, 246.94, 293.66],  // G
+      ];
+      // Pentatonic melody pool (C major pentatonic, two octaves).
+      const scale = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25];
+      let step = 0;
+
+      const padNote = (freq, when, dur, gain) => {
+        const o = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        o.type = 'triangle'; o.frequency.value = freq;
+        g.gain.setValueAtTime(0, when);
+        g.gain.linearRampToValueAtTime(gain, when + dur * 0.3);
+        g.gain.linearRampToValueAtTime(0, when + dur);
+        o.connect(g); g.connect(this.musicGain);
+        o.start(when); o.stop(when + dur + 0.1);
       };
-      this._music = setInterval(playChord, 5000);
-      playChord();
+
+      const tick = () => {
+        if (!this._music) return;
+        const t = this.ctx.currentTime;
+        const chord = chords[step % chords.length];
+        // Pad: hold the chord softly for the whole bar.
+        for (const f of chord) padNote(f, t, 7.5, 0.16);
+        // Melody: a few sparse notes over the bar.
+        const notes = 2 + ((Math.random() * 3) | 0);
+        for (let n = 0; n < notes; n++) {
+          const f = scale[(Math.random() * scale.length) | 0];
+          padNote(f, t + 1 + n * 1.6 + Math.random() * 0.4, 1.4, 0.1);
+        }
+        step++;
+      };
+
+      this._music = setInterval(tick, 8000);
+      tick();
     }
 
     stopMusic() { if (this._music) { clearInterval(this._music); this._music = null; } }
+    setMusicEnabled(on) {
+      this.musicOn = on;
+      if (!on) this.stopMusic();
+      else this.startMusic();
+    }
   }
 
   MC.Audio = Audio;

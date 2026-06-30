@@ -127,3 +127,13 @@ html, body {
 .furnace-arrow { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 26px; opacity: 0.75; }
 .progress.small { width: 90px; height: 10px; margin: 0; }
 .progress.small #furnaceBar { height: 100%; width: 0; background: linear-gradient(#ffb347, #ff7a1a); }
+
+/* Settings */
+#settingsMenu .panel { width: 420px; }
+.setting { margin: 14px 0; pointer-events: auto; }
+.setting label { display: block; font-size: 14px; margin-bottom: 6px; }
+.setting input[type=range] { width: 100%; accent-color: #5a8f3a; cursor: pointer; }
+.setting.toggle label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.setting.toggle input { width: 18px; height: 18px; accent-color: #5a8f3a; }
+.preset-row { display: flex; gap: 10px; }
+.btn.small { width: auto; flex: 1; margin: 4px 0; padding: 8px; font-size: 14px; }

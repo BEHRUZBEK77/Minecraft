@@ -55,6 +55,12 @@ are no external assets to load.
 - **Smelting:** place a furnace and smelt with fuel — sand→glass, cobble→stone,
   iron/gold ore→ingots, raw→cooked meat — via a dedicated furnace screen that keeps
   processing in the background.
+- **Tools & weapons:** craftable sword, pickaxe, axe, shovel, mace and spear.
+  Pickaxe/axe/shovel mine their block category much faster; sword/mace/spear deal
+  more melee damage (spear has extra reach, mace hits hardest).
+- **Settings menu:** render distance (chunk loader), field of view, master volume,
+  music toggle, mob-spawn toggle, smooth-lighting (AO) toggle, and FPS-Boost /
+  Quality performance presets — all persisted.
 - **Food & hunger:** animals drop meat, leaves drop apples; right-click edible items
   to restore hunger (and a little health). Cacti hurt on contact.
 - **Day/night:** animated sky gradient, sun/moon-driven light level, in-game clock.

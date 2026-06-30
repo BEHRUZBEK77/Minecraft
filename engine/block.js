@@ -17,6 +17,8 @@
     CACTUS: 21, FURNACE: 22,
     // Items (non-placeable). `food` restores hunger when eaten.
     APPLE: 23, MEAT: 24, COOKED_MEAT: 25, IRON_INGOT: 26, GOLD_INGOT: 27, BREAD: 28,
+    // Tools & weapons (items).
+    SWORD: 29, PICKAXE: 30, AXE: 31, SHOVEL: 32, MACE: 33, SPEAR: 34,
   };
 
   // Atlas is a grid of ATLAS_TILES x ATLAS_TILES tiles, each TILE px square.
@@ -61,6 +63,12 @@
   def(ID.IRON_INGOT, { name: 'Iron Ingot', solid: false, transparent: true, item: true, tiles: [29, 29, 29] });
   def(ID.GOLD_INGOT, { name: 'Gold Ingot', solid: false, transparent: true, item: true, tiles: [30, 30, 30] });
   def(ID.BREAD, { name: 'Bread', solid: false, transparent: true, item: true, food: 5, tiles: [31, 31, 31] });
+  def(ID.SWORD, { name: 'Iron Sword', solid: false, transparent: true, item: true, tool: true, tiles: [32, 32, 32] });
+  def(ID.PICKAXE, { name: 'Iron Pickaxe', solid: false, transparent: true, item: true, tool: true, tiles: [33, 33, 33] });
+  def(ID.AXE, { name: 'Iron Axe', solid: false, transparent: true, item: true, tool: true, tiles: [34, 34, 34] });
+  def(ID.SHOVEL, { name: 'Iron Shovel', solid: false, transparent: true, item: true, tool: true, tiles: [35, 35, 35] });
+  def(ID.MACE, { name: 'Mace', solid: false, transparent: true, item: true, tool: true, tiles: [36, 36, 36] });
+  def(ID.SPEAR, { name: 'Spear', solid: false, transparent: true, item: true, tool: true, tiles: [37, 37, 37] });
 
   /** Painter helpers operating on a 2D canvas context for one tile. */
   function fillTile(ctx, idx, base) {
@@ -193,6 +201,40 @@
     ctx.fillStyle = '#c98a3a';
     ctx.beginPath(); ctx.ellipse(p.x + TILE / 2, p.y + TILE / 2, TILE * 0.34, TILE * 0.22, 0, 0, Math.PI * 2); ctx.fill();
 
+    // Tools (icons drawn as a wooden handle + a metal head).
+    const tool = (idx, draw) => {
+      ctx.clearRect((idx % ATLAS_TILES) * TILE, ((idx / ATLAS_TILES) | 0) * TILE, TILE, TILE);
+      const o = fillTile(ctx, idx);
+      draw(o.x, o.y);
+    };
+    const handle = (x, y) => { ctx.fillStyle = '#7a5a32'; ctx.fillRect(x + TILE * 0.55, y + TILE * 0.5, TILE * 0.1, TILE * 0.42); };
+    tool(32, (x, y) => { // sword
+      ctx.fillStyle = '#7a5a32'; ctx.fillRect(x + TILE * 0.2, y + TILE * 0.7, TILE * 0.2, TILE * 0.12);
+      ctx.fillStyle = '#d8d8e0'; ctx.save(); ctx.translate(x + TILE / 2, y + TILE / 2); ctx.rotate(-0.78);
+      ctx.fillRect(-TILE * 0.06, -TILE * 0.42, TILE * 0.12, TILE * 0.6); ctx.restore();
+    });
+    tool(33, (x, y) => { handle(x, y); // pickaxe
+      ctx.strokeStyle = '#cfcfd8'; ctx.lineWidth = 4; ctx.beginPath();
+      ctx.moveTo(x + TILE * 0.25, y + TILE * 0.3); ctx.quadraticCurveTo(x + TILE * 0.6, y + TILE * 0.18, x + TILE * 0.8, y + TILE * 0.36); ctx.stroke(); ctx.lineWidth = 1;
+    });
+    tool(34, (x, y) => { handle(x, y); // axe
+      ctx.fillStyle = '#cfcfd8'; ctx.beginPath(); ctx.moveTo(x + TILE * 0.45, y + TILE * 0.2);
+      ctx.lineTo(x + TILE * 0.78, y + TILE * 0.3); ctx.lineTo(x + TILE * 0.6, y + TILE * 0.5); ctx.lineTo(x + TILE * 0.45, y + TILE * 0.42); ctx.fill();
+    });
+    tool(35, (x, y) => { handle(x, y); // shovel
+      ctx.fillStyle = '#cfcfd8'; ctx.fillRect(x + TILE * 0.48, y + TILE * 0.18, TILE * 0.24, TILE * 0.26);
+    });
+    tool(36, (x, y) => { handle(x, y); // mace
+      ctx.fillStyle = '#9a9aa6'; ctx.beginPath(); ctx.arc(x + TILE * 0.6, y + TILE * 0.32, TILE * 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6f6f7a'; for (let a = 0; a < 6; a++) { const an = a / 6 * Math.PI * 2; ctx.fillRect(x + TILE * 0.6 + Math.cos(an) * TILE * 0.2 - 2, y + TILE * 0.32 + Math.sin(an) * TILE * 0.2 - 2, 4, 4); }
+    });
+    tool(37, (x, y) => { // spear
+      ctx.fillStyle = '#7a5a32'; ctx.save(); ctx.translate(x + TILE / 2, y + TILE / 2); ctx.rotate(-0.78);
+      ctx.fillRect(-TILE * 0.04, -TILE * 0.1, TILE * 0.08, TILE * 0.7); ctx.restore();
+      ctx.fillStyle = '#cfcfd8'; ctx.save(); ctx.translate(x + TILE * 0.7, y + TILE * 0.28); ctx.rotate(-0.78);
+      ctx.beginPath(); ctx.moveTo(0, -TILE * 0.16); ctx.lineTo(TILE * 0.08, 0); ctx.lineTo(-TILE * 0.08, 0); ctx.fill(); ctx.restore();
+    });
+
     return canvas;
   }
 
@@ -219,6 +261,7 @@
     placeable: [ID.GRASS, ID.DIRT, ID.STONE, ID.COBBLE, ID.SAND, ID.WOOD, ID.PLANK,
       ID.LEAVES, ID.GLASS, ID.BRICK, ID.SNOW, ID.GRAVEL, ID.WATER, ID.TORCH,
       ID.CRAFTING, ID.FURNACE, ID.CACTUS, ID.COAL, ID.IRON, ID.GOLD, ID.DIAMOND,
-      ID.APPLE, ID.COOKED_MEAT, ID.IRON_INGOT, ID.GOLD_INGOT, ID.BREAD],
+      ID.APPLE, ID.COOKED_MEAT, ID.IRON_INGOT, ID.GOLD_INGOT, ID.BREAD,
+      ID.SWORD, ID.PICKAXE, ID.AXE, ID.SHOVEL, ID.MACE, ID.SPEAR],
   };
 })(typeof window !== 'undefined' ? window : this);

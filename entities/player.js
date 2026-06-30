@@ -48,8 +48,11 @@
      */
     update(input, dt) {
       const cam = this.camera;
-      // Mouse look.
+      // Mouse look always works.
       if (input.mouse.dx || input.mouse.dy) cam.look(input.mouse.dx, input.mouse.dy);
+
+      // While frozen (e.g. waiting for the ground chunk to load) only look around.
+      if (this.frozen) { this.vel = [0, 0, 0]; cam.position = this.eyePosition(); return; }
 
       this.inWater = Collision.inLiquid(this.world, this.pos, HALF, HEIGHT);
 

@@ -126,6 +126,7 @@
     const lightVal = (world.getLight(lnx, lny, lnz) / 15) * face.shade;
     const aoVals = [];
     for (let i = 0; i < 4; i++) {
+      if (!Mesher.useAO) { aoVals.push(1.0); continue; }
       const a = face.ao[i];
       const s1 = Blocks.isOpaque(world.getBlock(wx + a[0][0], wy + a[0][1], wz + a[0][2]));
       const s2 = Blocks.isOpaque(world.getBlock(wx + a[1][0], wy + a[1][1], wz + a[1][2]));
@@ -163,5 +164,6 @@
     };
   }
 
+  Mesher.useAO = true;   // toggled by the "Smooth lighting" setting
   MC.Mesher = Mesher;
 })(typeof window !== 'undefined' ? window : this);

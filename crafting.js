@@ -26,6 +26,18 @@
     { pattern: ['CC', 'CC'], key: { C: ID.COBBLE }, result: { id: ID.BRICK, count: 4 } },
     // 9 stone -> ... etc. (3x3 full of cobble -> some block) demonstration
     { pattern: ['CCC', 'CCC', 'CCC'], key: { C: ID.COBBLE }, result: { id: ID.STONE, count: 8 } },
+    // furnace: 8 cobble ring (3x3 with hollow center)
+    { pattern: ['CCC', 'C C', 'CCC'], key: { C: ID.COBBLE }, result: { id: ID.FURNACE, count: 1 } },
+    // 3 apples -> bread (sweet roll)
+    { shapeless: [ID.APPLE, ID.APPLE, ID.APPLE], result: { id: ID.BREAD, count: 1 } },
+
+    // Tools & weapons: iron ingots (I) on a plank handle (P).
+    { pattern: ['I', 'I', 'P'], key: { I: ID.IRON_INGOT, P: ID.PLANK }, result: { id: ID.SWORD, count: 1 } },
+    { pattern: ['III', ' P ', ' P '], key: { I: ID.IRON_INGOT, P: ID.PLANK }, result: { id: ID.PICKAXE, count: 1 } },
+    { pattern: ['II', 'IP', ' P'], key: { I: ID.IRON_INGOT, P: ID.PLANK }, result: { id: ID.AXE, count: 1 } },
+    { pattern: ['I', 'P', 'P'], key: { I: ID.IRON_INGOT, P: ID.PLANK }, result: { id: ID.SHOVEL, count: 1 } },
+    { pattern: ['GIG', 'GPG', ' P '], key: { I: ID.IRON_INGOT, P: ID.PLANK, G: ID.GOLD_INGOT }, result: { id: ID.MACE, count: 1 } },
+    { pattern: ['I', 'P', 'P'], key: { I: ID.DIAMOND, P: ID.PLANK }, result: { id: ID.SPEAR, count: 1 } },
   ];
 
   class Crafting {
