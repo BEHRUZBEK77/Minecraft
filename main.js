@@ -95,7 +95,9 @@
 
     /** Apply a performance preset and refresh the UI. */
     _applyPreset(kind) {
-      if (kind === 'fast') Object.assign(this.settings, { renderDistance: 4, smooth: false, greedy: true });
+      // Note: the greedy mesher is left off — the culled mesher is already fast and
+      // renders without the gaps the simplified greedy path could produce.
+      if (kind === 'fast') Object.assign(this.settings, { renderDistance: 5, smooth: false, greedy: false });
       else Object.assign(this.settings, { renderDistance: 8, smooth: true, greedy: false });
       this._syncSettingsUI();
       this.applySettings();
