@@ -47,8 +47,12 @@ are no external assets to load.
   damage, creative mode with flight.
 - **Physics:** gravity, swept AABB collision, jumping, swimming, auto-step for mobs.
 - **Entities:** passive animals (cow, pig, chicken, sheep) and hostile mobs
-  (zombie, skeleton, spider) with wander/chase/attack AI. Monsters spawn at night
-  *and* in dark underground caves; animals spawn on grass by day.
+  (zombie, skeleton, spider) with wander/chase/attack AI, ledge avoidance, a red
+  hurt flash and floating health bars. Undead burn in daylight. Monsters spawn at
+  night *and* in dark underground caves; animals spawn on grass by day.
+- **Performance:** per-frame time-budgeted chunk streaming/meshing, cached
+  generation queue that only rescans on chunk-boundary crossings, frustum culling,
+  and an FPS-Boost preset (lower render distance, AO off, greedy meshing).
 - **Infinite world:** chunks are streamed endlessly in every direction around the
   player — there is no world border; only nearby chunks stay in memory.
 - **Inventory & crafting:** hotbar, stacking, drag-and-drop, 2×2 and 3×3 recipes.
@@ -57,7 +61,9 @@ are no external assets to load.
   processing in the background.
 - **Tools & weapons:** craftable sword, pickaxe, axe, shovel, mace and spear.
   Pickaxe/axe/shovel mine their block category much faster; sword/mace/spear deal
-  more melee damage (spear has extra reach, mace hits hardest).
+  more melee damage (spear has extra reach, mace hits hardest). Each tool has
+  **durability** that wears down with use (shown as a bar on the slot) and breaks
+  when depleted.
 - **Settings menu:** render distance (chunk loader), field of view, master volume,
   music toggle, mob-spawn toggle, smooth-lighting (AO) toggle, and FPS-Boost /
   Quality performance presets — all persisted.

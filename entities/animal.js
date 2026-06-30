@@ -17,6 +17,7 @@
       this.hostile = false;
       this._fleeTime = 0;
       configure(this, type);
+      this.maxHealth = this.health;
     }
 
     think(dt, player) {

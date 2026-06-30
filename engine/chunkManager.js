@@ -35,23 +35,32 @@
     update(px, pz) {
       const [pcx, pcz] = ChunkManager.chunkCoord(px, pz);
       const R = this.renderDistance;
+      const start = performance.now();
+      // Per-frame time budget for world streaming work (keeps the frame smooth).
+      const budgetMs = this.budgetMs || 6;
+
       // Generate one ring beyond the render distance so the outer visible ring has
-      // neighbors and can be meshed (otherwise the edge stays invisible).
+      // neighbors and can be meshed. Rescan only when the player crosses a chunk
+      // boundary or the previous queue is exhausted (the scan is O(R^2)).
       const G = R + 1;
-      let builds = 0;
-      const candidates = [];
-      for (let dz = -G; dz <= G; dz++) {
-        for (let dx = -G; dx <= G; dx++) {
-          const cx = pcx + dx, cz = pcz + dz;
-          if (dx * dx + dz * dz > G * G) continue;
-          if (!this.world.hasChunk(cx, cz)) candidates.push([dx * dx + dz * dz, cx, cz]);
+      if (this._lastScanCx !== pcx || this._lastScanCz !== pcz || !this._genQueue || !this._genQueue.length) {
+        this._lastScanCx = pcx; this._lastScanCz = pcz;
+        const candidates = [];
+        for (let dz = -G; dz <= G; dz++) {
+          for (let dx = -G; dx <= G; dx++) {
+            const cx = pcx + dx, cz = pcz + dz;
+            if (dx * dx + dz * dz > G * G) continue;
+            if (!this.world.hasChunk(cx, cz)) candidates.push([dx * dx + dz * dz, cx, cz]);
+          }
         }
+        candidates.sort((a, b) => a[0] - b[0]);
+        this._genQueue = candidates;
       }
-      candidates.sort((a, b) => a[0] - b[0]);
-      for (const [, cx, cz] of candidates) {
-        if (builds >= this.maxBuildsPerFrame) break;
-        this._createChunk(cx, cz);
-        builds++;
+      // Generate from the queue until the time budget is spent.
+      while (this._genQueue.length) {
+        if (performance.now() - start > budgetMs) break;
+        const [, cx, cz] = this._genQueue.shift();
+        if (!this.world.hasChunk(cx, cz)) this._createChunk(cx, cz);
       }
 
       // Unload chunks beyond render distance + 2.
@@ -65,9 +74,7 @@
         }
       }
 
-      // Remesh dirty chunks (those just generated or edited) within budget.
-      let meshes = 0;
-      // Prefer dirty chunks closest to the player.
+      // Remesh dirty chunks (closest first) until the remaining budget is spent.
       const dirty = [];
       for (const chunk of this.world.chunks.values()) {
         if (chunk.dirty && chunk.generated && this._neighborsReady(chunk))
@@ -76,9 +83,8 @@
       dirty.sort((a, b) =>
         ((a.cx - pcx) ** 2 + (a.cz - pcz) ** 2) - ((b.cx - pcx) ** 2 + (b.cz - pcz) ** 2));
       for (const chunk of dirty) {
-        if (meshes >= this.maxMeshesPerFrame) break;
+        if (performance.now() - start > budgetMs * 1.6) break;
         this._remesh(chunk);
-        meshes++;
       }
     }
 

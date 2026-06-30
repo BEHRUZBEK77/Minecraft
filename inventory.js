@@ -40,8 +40,39 @@
       }
     }
 
+    /**
+     * Add a freshly-made tool to the first empty slot with full durability.
+     * Tools never stack. @returns true if it fit.
+     */
+    addTool(id) {
+      const max = MC.Tools ? MC.Tools.maxDura(id) : 0;
+      for (let i = 0; i < this.slots.length; i++) {
+        if (!this.slots[i]) { this.slots[i] = { id, count: 1, dura: max, maxDura: max }; return true; }
+      }
+      return false;
+    }
+
+    /**
+     * Spend one point of durability on the selected tool; remove it when it
+     * breaks. @returns true if the tool broke this call.
+     */
+    damageSelectedTool(amount = 1) {
+      const s = this.slots[this.selected];
+      if (!s || s.dura == null) return false;
+      if (this.creative) return false;
+      s.dura -= amount;
+      if (s.dura <= 0) { this.slots[this.selected] = null; return true; }
+      return false;
+    }
+
     /** Add an item, stacking where possible. @returns leftover count not added. */
     add(id, count = 1) {
+      // Tools are unique items; route them through addTool so they don't merge.
+      if (MC.Tools && MC.Tools.isTool(id)) {
+        let left = count;
+        while (left > 0 && this.addTool(id)) left--;
+        return left;
+      }
       // First, top up existing stacks.
       for (let i = 0; i < this.slots.length && count > 0; i++) {
         const s = this.slots[i];

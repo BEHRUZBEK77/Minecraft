@@ -451,8 +451,17 @@
         // Leaves occasionally drop an apple.
         if (hit.id === Blocks.ID.LEAVES && Math.random() < 0.06)
           this.inventory.add(Blocks.ID.APPLE, 1);
+        // Wear down the held tool.
+        this._wearTool();
         this.ui.renderHotbar();
       }
+    }
+
+    /** Spend durability on the held tool and announce a break. */
+    _wearTool() {
+      const sel = this.inventory.selectedItem;
+      if (!sel || !MC.Tools.isTool(sel.id)) return;
+      if (this.inventory.damageSelectedTool(1)) this.audio.break(sel.id);
     }
 
     /** Open the shared furnace UI. */
@@ -543,6 +552,23 @@
         if (this.settings.mobs) this._trySpawn(sky.day);
       }
       for (const m of this.mobs) m.update(dt, this.player);
+
+      // Undead burn in bright daylight when exposed to the open sky.
+      if (sky.day > 0.55) {
+        for (const m of this.mobs) {
+          if (!m.burns) continue;
+          const hx = Math.floor(m.pos[0]), hz = Math.floor(m.pos[2]);
+          const hy = Math.floor(m.pos[1] + m.height);
+          let exposed = true;
+          for (let y = hy + 1; y < MC.CHUNK.SIZE_Y; y++)
+            if (Blocks.isOpaque(this.world.getBlock(hx, y, hz))) { exposed = false; break; }
+          if (exposed) {
+            m._burn = (m._burn || 0) + dt;
+            if (m._burn > 1) { m._burn = 0; m.damage(2); }
+          }
+        }
+      }
+
       // Remove dead / far mobs.
       this.mobs = this.mobs.filter((m) => {
         if (m.dead) return false;
@@ -577,11 +603,13 @@
         const dx = best.pos[0] - eye[0], dz = best.pos[2] - eye[2];
         const l = Math.hypot(dx, dz) || 1;
         best.pos[0] += dx / l * 0.4; best.pos[2] += dz / l * 0.4; best.vel[1] = 4;
+        // Weapons take durability damage on a hit.
+        if (this.player.gameMode === 'survival') this._wearTool();
         // Loot drops on kill (survival).
         if (best.dead && !best.hostile && this.player.gameMode === 'survival') {
           this.inventory.add(Blocks.ID.MEAT, 1 + ((Math.random() * 2) | 0));
-          this.ui.renderHotbar();
         }
+        this.ui.renderHotbar();
       }
     }
 
@@ -715,6 +743,18 @@
       for (const p of this._particles) {
         ctx.fillStyle = p.color;
         ctx.fillRect(p.sx, p.sy, p.size, p.size);
+      }
+
+      // Mob health bars (only when damaged).
+      for (const m of this.mobs) {
+        if (m.health >= m.maxHealth) continue;
+        const s = this._project(m.pos[0], m.pos[1] + m.height + 0.35, m.pos[2]);
+        if (!s) continue;
+        const w = 34, h = 5, frac = Math.max(0, m.health / m.maxHealth);
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(s[0] - w / 2, s[1], w, h);
+        ctx.fillStyle = m.hostile ? '#d33' : '#3c3';
+        ctx.fillRect(s[0] - w / 2, s[1], w * frac, h);
       }
 
       // Breaking progress (radial arc at crosshair).

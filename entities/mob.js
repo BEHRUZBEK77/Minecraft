@@ -8,6 +8,7 @@
   const MC = (global.MC = global.MC || {});
   const Collision = MC.Collision;
   const Physics = MC.Physics;
+  const Blocks = MC.Blocks;
 
   class Mob {
     /** @param {World} world @param {number[]} pos spawn feet position */
@@ -23,13 +24,26 @@
       this.height = 1.2;
       this.speed = 1.6;
       this.health = 10;
+      this.maxHealth = 10;
       this.hostile = false;
+      this.avoidLedges = true;   // don't walk off tall drops
+      this.hurtFlash = 0;        // seconds of red flash after taking damage
       this.color = [0.8, 0.8, 0.8];
       this.parts = [];           // {offset:[x,y,z], size:[x,y,z], color:[r,g,b]}
       this._state = 'idle';
       this._timer = 0;
       this._moveDir = [0, 0];
       this._wanderTime = 0;
+    }
+
+    /** True if stepping in the move direction would walk off a tall ledge. */
+    _ledgeAhead() {
+      const fx = Math.floor(this.pos[0] + this._moveDir[0] * 0.7);
+      const fz = Math.floor(this.pos[2] + this._moveDir[1] * 0.7);
+      const fy = Math.floor(this.pos[1]);
+      for (let d = 1; d <= 3; d++)
+        if (Blocks.isSolid(this.world.getBlock(fx, fy - d, fz))) return false;
+      return true;
     }
 
     /** Decide behavior. Base implementation: idle/wander. */
@@ -60,7 +74,12 @@
     /** Physics + collision integration. */
     update(dt, player) {
       this.think(dt, player);
+      if (this.hurtFlash > 0) this.hurtFlash -= dt;
       const inWater = Collision.inLiquid(this.world, this.pos, this.half, this.height);
+
+      // Don't stroll off tall cliffs while grounded (still allowed to fall if pushed).
+      if (this.avoidLedges && this.onGround && (this._moveDir[0] || this._moveDir[1]) && this._ledgeAhead())
+        this._moveDir = [0, 0];
 
       this.vel[0] = this._moveDir[0] * this.speed;
       this.vel[2] = this._moveDir[1] * this.speed;
@@ -80,7 +99,7 @@
       this._anim = (this._anim || 0) + Math.hypot(this.pos[0] - before[0], this.pos[2] - before[2]) * 6;
     }
 
-    damage(n) { this.health -= n; if (this.health <= 0) this.dead = true; }
+    damage(n) { this.health -= n; this.hurtFlash = 0.25; if (this.health <= 0) this.dead = true; }
 
     /**
      * Render the mob's cuboid parts. Parts are positioned relative to feet,
@@ -100,7 +119,12 @@
           this.pos[1] + o[1],
           this.pos[2] + rz - s[2] / 2,
         ];
-        renderer.drawCuboid(origin, s, part.color || this.color);
+        let color = part.color || this.color;
+        if (this.hurtFlash > 0) {
+          // Blend toward red while hurt.
+          color = [Math.min(1, color[0] * 0.4 + 0.7), color[1] * 0.4, color[2] * 0.4];
+        }
+        renderer.drawCuboid(origin, s, color);
       }
     }
 

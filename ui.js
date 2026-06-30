@@ -81,6 +81,18 @@
           c.className = 'count'; c.textContent = item.count;
           d.appendChild(c);
         }
+        // Durability bar for tools that have taken damage.
+        if (item.dura != null && item.maxDura) {
+          const frac = item.dura / item.maxDura;
+          const bar = document.createElement('div');
+          bar.className = 'dura';
+          const fillEl = document.createElement('div');
+          fillEl.style.width = (frac * 100) + '%';
+          // green -> red as it wears.
+          fillEl.style.background = `hsl(${Math.round(frac * 120)},80%,45%)`;
+          bar.appendChild(fillEl);
+          d.appendChild(bar);
+        }
       }
       return d;
     }

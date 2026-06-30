@@ -19,7 +19,9 @@
       this.attackRange = 1.6;
       this.attackDamage = 2;
       this._attackCd = 0;
+      this.burns = type !== 'spider';   // undead burn in daylight
       configure(this, type);
+      this.maxHealth = this.health;
     }
 
     think(dt, player) {
