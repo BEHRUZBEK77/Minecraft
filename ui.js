@@ -18,11 +18,17 @@
       this._iconCache = new Map();
       this._cache();
       this.invOpen = false;
+      this.furnaceOpen = false;
+      this.furnace = null;           // active MC.Furnace instance
       this.craftGrid = new Array(9).fill(null);   // 3x3 (table) or top-left 2x2
       this.craftSize = 2;
       this._drag = null;
       this._bindInventory();
+      this._bindFurnace();
     }
+
+    /** Any modal screen open? Used to pause the world. */
+    get anyOpen() { return this.invOpen || this.furnaceOpen; }
 
     _cache() {
       const $ = (id) => document.getElementById(id);
@@ -33,7 +39,11 @@
         craftArea: $('craftArea'), craftGrid: $('craftGrid'), craftResult: $('craftResult'),
         mainMenu: $('mainMenu'), pauseMenu: $('pauseMenu'), loading: $('loading'),
         loadingBar: $('loadingBar'), loadingText: $('loadingText'),
-        deathScreen: $('deathScreen'), clock: $('clock'),
+        deathScreen: $('deathScreen'), clock: $('clock'), biome: $('biome'),
+        furnace: $('furnace'), furnaceInput: $('furnaceInput'), furnaceFuel: $('furnaceFuel'),
+        furnaceOutput: $('furnaceOutput'), furnaceBar: $('furnaceBar'),
+        furnaceFlame: $('furnaceFlame'), furnaceInvGrid: $('furnaceInvGrid'),
+        furnaceHotbarGrid: $('furnaceHotbarGrid'),
       };
     }
 
@@ -260,6 +270,77 @@
       for (let i = 0; i < cells; i++) this.craftGrid[i] = null;  // consume (1 each)
       this.game.audio.place(this._craftResult.id);
       this.renderInventory();
+    }
+
+    /* ---------------- Furnace screen ---------------- */
+    openFurnace(furnace) {
+      this.furnace = furnace;
+      this.furnaceOpen = true;
+      this.el.furnace.style.display = 'flex';
+      this.renderFurnace();
+    }
+    closeFurnace() {
+      this.furnaceOpen = false;
+      this.el.furnace.style.display = 'none';
+      this._drag = null;
+    }
+
+    /** Re-render the furnace slots, progress bar and player inventory rows. */
+    renderFurnace() {
+      const f = this.furnace, inv = this.game.inventory;
+      if (!f) return;
+      const fill = (el, item, slotName) => {
+        el.innerHTML = '';
+        el.appendChild(this._slotEl(item, slotName, 'furnace'));
+      };
+      fill(this.el.furnaceInput, f.input, 'input');
+      fill(this.el.furnaceFuel, f.fuel, 'fuel');
+      fill(this.el.furnaceOutput, f.output, 'output');
+      this.el.furnaceBar.style.width = (f.progress * 100) + '%';
+      this.el.furnaceFlame.style.opacity = f.burnLeft > 0 ? '1' : '0.25';
+      this.el.furnaceInvGrid.innerHTML = '';
+      for (let i = Inv.HOTBAR; i < inv.slots.length; i++)
+        this.el.furnaceInvGrid.appendChild(this._slotEl(inv.slots[i], i, 'inv'));
+      this.el.furnaceHotbarGrid.innerHTML = '';
+      for (let i = 0; i < Inv.HOTBAR; i++)
+        this.el.furnaceHotbarGrid.appendChild(this._slotEl(inv.slots[i], i, 'inv'));
+    }
+
+    /** Wire furnace pointer interactions (click-to-move). */
+    _bindFurnace() {
+      document.addEventListener('mousedown', (e) => {
+        if (!this.furnaceOpen) return;
+        if (!e.target.closest('#furnace')) return;
+        e.preventDefault();
+        const slot = e.target.closest('.slot');
+        if (!slot) return;
+        const inv = this.game.inventory, f = this.furnace;
+        const kind = slot.dataset.kind, idx = slot.dataset.idx;
+
+        if (kind === 'inv') {
+          // Pick up / put down within the inventory.
+          const i = parseInt(idx, 10);
+          if (this._drag == null) { if (inv.slots[i]) this._drag = { kind, idx: i }; }
+          else { if (this._drag.kind === 'inv') inv.moveSlot(this._drag.idx, i); this._drag = null; }
+        } else if (kind === 'furnace') {
+          if (idx === 'output') {
+            if (f.output) { inv.add(f.output.id, f.output.count); f.output = null; this.game.audio.place(0); }
+          } else if (this._drag && this._drag.kind === 'inv') {
+            // Move held inventory stack into the furnace input/fuel slot.
+            const src = inv.slots[this._drag.idx];
+            if (src) {
+              const cur = f[idx];
+              if (!cur) { f[idx] = { id: src.id, count: src.count }; inv.slots[this._drag.idx] = null; }
+              else if (cur.id === src.id) { cur.count += src.count; inv.slots[this._drag.idx] = null; }
+            }
+            this._drag = null;
+          } else if (f[idx]) {
+            // Pull furnace slot contents back to the inventory.
+            inv.add(f[idx].id, f[idx].count); f[idx] = null;
+          }
+        }
+        this.renderFurnace();
+      });
     }
   }
 

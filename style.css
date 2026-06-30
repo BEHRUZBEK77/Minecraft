@@ -117,3 +117,13 @@ html, body {
 .arrow { font-size: 28px; opacity: 0.7; }
 .result .slot { border-color: #ffd24d; }
 .hint { margin-top: 10px; font-size: 12px; opacity: 0.6; }
+
+/* Furnace */
+.furnace-row { display: flex; align-items: center; gap: 22px; margin-bottom: 8px; }
+.furnace-col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.fslot { width: 56px; height: 56px; }
+.fslot .slot { width: 52px; height: 52px; }
+.flame { font-size: 20px; transition: opacity .2s; }
+.furnace-arrow { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 26px; opacity: 0.75; }
+.progress.small { width: 90px; height: 10px; margin: 0; }
+.progress.small #furnaceBar { height: 100%; width: 0; background: linear-gradient(#ffb347, #ff7a1a); }

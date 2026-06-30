@@ -30,6 +30,7 @@
       this.player = null;
       this.chunks = null;
       this.mobs = [];
+      this.furnace = new MC.Furnace();   // single shared furnace state
 
       this.time = 0.3;          // 0..1, 0.25 = sunrise, 0.5 = noon
       this.weather = 'clear';   // clear | rain | storm
@@ -69,18 +70,20 @@
       click('btnRespawn', () => this.respawn());
 
       this.input.onLockChange = (locked) => {
-        if (!locked && this.running && !this.ui.invOpen && !this.player?.dead) this.pause();
+        if (!locked && this.running && !this.ui.anyOpen && !this.player?.dead) this.pause();
       };
 
       addEventListener('keydown', (e) => {
         if (!this.started) return;
         if (e.code === 'Escape') {
-          if (this.ui.invOpen) { this.ui.closeInventory(); this.input.lock(); }
+          if (this.ui.furnaceOpen) { this.ui.closeFurnace(); this.input.lock(); }
+          else if (this.ui.invOpen) { this.ui.closeInventory(); this.input.lock(); }
           else if (this.paused) this.resume();
           else this.pause();
         }
         if (e.code === 'KeyE' && !this.paused && !this.player?.dead) {
-          if (this.ui.invOpen) { this.ui.closeInventory(); this.input.lock(); }
+          if (this.ui.furnaceOpen) { this.ui.closeFurnace(); this.input.lock(); }
+          else if (this.ui.invOpen) { this.ui.closeInventory(); this.input.lock(); }
           else { this.openInventory(false); }
         }
         if (e.code === 'F3') { e.preventDefault(); this.ui.toggleDebug(); }
@@ -124,6 +127,7 @@
       if (meta) {
         this.player.deserialize(meta.player);
         this.inventory.deserialize(meta.inventory);
+        this.furnace.deserialize(meta.furnace);
         this.time = meta.time ?? this.time;
         this.weather = meta.weather ?? 'clear';
       } else {
@@ -203,8 +207,12 @@
       this._last = now;
       if (dt > 0.1) dt = 0.1;  // clamp huge frame gaps
 
-      if (!this.paused && !this.ui.invOpen && !this.player.dead) {
+      if (!this.paused && !this.ui.anyOpen && !this.player.dead) {
         this._update(dt);
+      } else if (this.ui.furnaceOpen) {
+        // Keep the furnace smelting while its UI is open.
+        this.furnace.tick(dt);
+        this.ui.renderFurnace();
       }
       this._render();
       this._fpsCount(dt);
@@ -220,6 +228,12 @@
       // Player.
       this.player.update(this.input, dt);
       if (this.player.dead) { this.ui.showDeath(); this.input.unlock(); this.audio.hurt(); }
+
+      // Furnace keeps smelting in the background.
+      this.furnace.tick(dt);
+
+      // Contact damage from cactus.
+      this._cactusDamage(dt);
 
       // Footstep audio.
       if (this.player.onGround && (Math.abs(this.player.vel[0]) + Math.abs(this.player.vel[2])) > 0.5) {
@@ -270,11 +284,29 @@
         this._breaking = null;
       }
 
-      // Right mouse (edge): place block or use crafting table.
-      if (hit && this.input.mouse.rightEdge) {
+      // Right mouse (edge): eat food, open station, or place a block.
+      if (this.input.mouse.rightEdge) {
+        // Eating takes priority when holding food and hungry.
+        const sel = this.inventory.selectedItem;
+        if (sel && Blocks.isFood(sel.id) && this._tryEat(sel)) return;
+        if (!hit) return;
         if (hit.id === Blocks.ID.CRAFTING) { this.openInventory(true); return; }
+        if (hit.id === Blocks.ID.FURNACE) { this.openFurnace(); return; }
         this._placeBlock(hit);
       }
+    }
+
+    /** Eat the selected food item if the player can benefit from it. */
+    _tryEat(item) {
+      const def = Blocks.get(item.id);
+      if (this.player.gameMode === 'survival' &&
+          this.player.hunger >= this.player.maxHunger) return false;
+      this.player.eat(def.food);
+      if (this.player.health < this.player.maxHealth) this.player.heal(1);
+      this.inventory.consumeSelected();
+      this.audio.step();
+      this.ui.renderHotbar();
+      return true;
     }
 
     _breakBlock(hit) {
@@ -287,13 +319,38 @@
       if (this.player.gameMode === 'survival') {
         const drop = def.drop != null ? def.drop : hit.id;
         if (drop !== Blocks.ID.AIR) this.inventory.add(drop, 1);
+        // Leaves occasionally drop an apple.
+        if (hit.id === Blocks.ID.LEAVES && Math.random() < 0.06)
+          this.inventory.add(Blocks.ID.APPLE, 1);
         this.ui.renderHotbar();
+      }
+    }
+
+    /** Open the shared furnace UI. */
+    openFurnace() {
+      this.input.unlock();
+      this.ui.openFurnace(this.furnace);
+    }
+
+    /** Damage the player while standing in/against a cactus. */
+    _cactusDamage(dt) {
+      if (this.player.gameMode !== 'survival') return;
+      this._cactusTimer = (this._cactusTimer || 0) + dt;
+      if (this._cactusTimer < 0.5) return;
+      this._cactusTimer = 0;
+      const p = this.player.pos;
+      const around = [[0, 0, 0], [0.3, 0, 0], [-0.3, 0, 0], [0, 0, 0.3], [0, 0, -0.3]];
+      for (const o of around) {
+        if (this.world.getBlock(Math.floor(p[0] + o[0]), Math.floor(p[1] + 0.5), Math.floor(p[2] + o[2])) === Blocks.ID.CACTUS) {
+          this.player.damage(1); this.audio.hurt(); return;
+        }
       }
     }
 
     _placeBlock(hit) {
       const item = this.inventory.selectedItem;
       if (!item) return;
+      if (Blocks.isItem(item.id)) return;   // food/ingots can't be placed
       const x = hit.x + hit.nx, y = hit.y + hit.ny, z = hit.z + hit.nz;
       if (y < 0 || y >= MC.CHUNK.SIZE_Y) return;
       if (this.world.getBlock(x, y, z) !== Blocks.ID.AIR) return;
@@ -384,11 +441,15 @@
       if (best) {
         best.damage(4);
         this.audio.mob(best.type);
-        // knockback
-        const k = MC.math.normalize ? null : null;
+        // Knockback.
         const dx = best.pos[0] - eye[0], dz = best.pos[2] - eye[2];
         const l = Math.hypot(dx, dz) || 1;
         best.pos[0] += dx / l * 0.4; best.pos[2] += dz / l * 0.4; best.vel[1] = 4;
+        // Loot drops on kill (survival).
+        if (best.dead && !best.hostile && this.player.gameMode === 'survival') {
+          this.inventory.add(Blocks.ID.MEAT, 1 + ((Math.random() * 2) | 0));
+          this.ui.renderHotbar();
+        }
       }
     }
 
@@ -490,6 +551,11 @@
       // HUD.
       this.ui.renderStats();
       this.ui.setClock(this._clockText());
+      if (this.world && this.ui.el.biome) {
+        const h = this.world.surfaceHeight(Math.floor(this.player.pos[0]), Math.floor(this.player.pos[2]));
+        this.ui.el.biome.textContent = this.world.biomeAt(
+          Math.floor(this.player.pos[0]), Math.floor(this.player.pos[2]), h).name;
+      }
     }
 
     /** Render rain/snow + break particles + breaking crack indicator. */
@@ -608,6 +674,7 @@
         seed: this.world.seed,
         player: this.player.serialize(),
         inventory: this.inventory.serialize(),
+        furnace: this.furnace.serialize(),
         time: this.time,
         weather: this.weather,
       });

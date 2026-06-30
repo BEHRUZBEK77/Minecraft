@@ -32,8 +32,10 @@ are no external assets to load.
 
 - **Engine:** custom WebGL renderer, projection/view matrices, vertex & index
   buffers, procedural texture atlas, back-face + frustum culling, fog.
-- **World:** infinite procedural terrain (Perlin/fBm), biomes, mountains, valleys,
-  beaches, seas, 3D-noise caves, ore distribution and trees.
+- **World:** infinite procedural terrain (Perlin/fBm) with distinct **biomes**
+  (plains, forest, desert with cacti, tundra, snowy & rocky peaks) driven by
+  temperature/humidity noise, plus mountains, beaches, seas, 3D-noise caves, ore
+  distribution and biome-appropriate vegetation.
 - **Chunks:** 16×128×16 chunks streamed around the player with budgeted generation,
   meshing and unloading. Includes both a culled mesher and a greedy mesher.
 - **Lighting:** flood-fill skylight + block light (torches), ambient occlusion, and
@@ -50,6 +52,11 @@ are no external assets to load.
 - **Infinite world:** chunks are streamed endlessly in every direction around the
   player — there is no world border; only nearby chunks stay in memory.
 - **Inventory & crafting:** hotbar, stacking, drag-and-drop, 2×2 and 3×3 recipes.
+- **Smelting:** place a furnace and smelt with fuel — sand→glass, cobble→stone,
+  iron/gold ore→ingots, raw→cooked meat — via a dedicated furnace screen that keeps
+  processing in the background.
+- **Food & hunger:** animals drop meat, leaves drop apples; right-click edible items
+  to restore hunger (and a little health). Cacti hurt on contact.
 - **Day/night:** animated sky gradient, sun/moon-driven light level, in-game clock.
 - **Weather:** clear / rain / storm with overlay particles and ambient audio.
 - **Audio:** fully synthesized SFX and ambient music via the Web Audio API.

@@ -20,6 +20,7 @@
     <div id="topbar">
       <span id="fps">0 FPS</span>
       <span id="clock">☀ 06:00</span>
+      <span id="biome">Plains</span>
       <span id="coords">X 0 Y 0 Z 0</span>
     </div>
     <div id="debug" style="display:none"></div>
@@ -48,6 +49,31 @@
       <h3>Hotbar</h3>
       <div id="hotbarGrid" class="grid"></div>
       <p class="hint">Click a stack to pick it up, click again to drop. Press E or ESC to close.</p>
+    </div>
+  </div>
+
+  <!-- Furnace overlay -->
+  <div id="furnace" class="overlay" style="display:none">
+    <div class="panel inv-panel">
+      <h2>Furnace</h2>
+      <div class="furnace-row">
+        <div class="furnace-col">
+          <div id="furnaceInput" class="fslot"></div>
+          <div class="flame" id="furnaceFlame">🔥</div>
+          <div id="furnaceFuel" class="fslot"></div>
+        </div>
+        <div class="furnace-arrow">
+          <div class="progress small"><div id="furnaceBar"></div></div>
+          ➜
+        </div>
+        <div id="furnaceOutput" class="fslot result"></div>
+      </div>
+      <p class="hint">Click a stack, then a slot to move it. Smeltables: sand, cobble,
+        ore, raw meat. Fuels: coal, wood, planks. Press E/ESC to close.</p>
+      <h3>Storage</h3>
+      <div id="furnaceInvGrid" class="grid"></div>
+      <h3>Hotbar</h3>
+      <div id="furnaceHotbarGrid" class="grid"></div>
     </div>
   </div>
 
@@ -116,6 +142,7 @@
   <script src="entities/zombie.js"></script>
   <script src="inventory.js"></script>
   <script src="crafting.js"></script>
+  <script src="smelting.js"></script>
   <script src="save.js"></script>
   <script src="audio.js"></script>
   <script src="ui.js"></script>

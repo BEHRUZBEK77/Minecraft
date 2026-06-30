@@ -13,6 +13,10 @@
     LEAVES: 7, SNOW: 8, BEDROCK: 9, GLASS: 10, PLANK: 11, COBBLE: 12,
     COAL: 13, IRON: 14, GOLD: 15, DIAMOND: 16, TORCH: 17, CRAFTING: 18,
     BRICK: 19, GRAVEL: 20,
+    // New blocks / items.
+    CACTUS: 21, FURNACE: 22,
+    // Items (non-placeable). `food` restores hunger when eaten.
+    APPLE: 23, MEAT: 24, COOKED_MEAT: 25, IRON_INGOT: 26, GOLD_INGOT: 27, BREAD: 28,
   };
 
   // Atlas is a grid of ATLAS_TILES x ATLAS_TILES tiles, each TILE px square.
@@ -48,6 +52,15 @@
   def(ID.CRAFTING, { name: 'Crafting Table', tiles: [19, 20, 12], hardness: 2 });
   def(ID.BRICK, { name: 'Bricks', tiles: [21, 21, 21], hardness: 2.5 });
   def(ID.GRAVEL, { name: 'Gravel', tiles: [22, 22, 22], hardness: 1.2 });
+  def(ID.CACTUS, { name: 'Cactus', tiles: [23, 23, 23], hardness: 0.4, damage: 1 });
+  def(ID.FURNACE, { name: 'Furnace', tiles: [24, 25, 24], hardness: 3.5, drop: ID.FURNACE });
+  // Items: not placeable in the world; carried/eaten/used in recipes.
+  def(ID.APPLE, { name: 'Apple', solid: false, transparent: true, item: true, food: 4, tiles: [26, 26, 26] });
+  def(ID.MEAT, { name: 'Raw Meat', solid: false, transparent: true, item: true, food: 2, tiles: [27, 27, 27] });
+  def(ID.COOKED_MEAT, { name: 'Cooked Meat', solid: false, transparent: true, item: true, food: 6, tiles: [28, 28, 28] });
+  def(ID.IRON_INGOT, { name: 'Iron Ingot', solid: false, transparent: true, item: true, tiles: [29, 29, 29] });
+  def(ID.GOLD_INGOT, { name: 'Gold Ingot', solid: false, transparent: true, item: true, tiles: [30, 30, 30] });
+  def(ID.BREAD, { name: 'Bread', solid: false, transparent: true, item: true, food: 5, tiles: [31, 31, 31] });
 
   /** Painter helpers operating on a 2D canvas context for one tile. */
   function fillTile(ctx, idx, base) {
@@ -143,6 +156,43 @@
     for (let r = 0; r < TILE; r += 8) { ctx.beginPath(); ctx.moveTo(p.x, p.y + r); ctx.lineTo(p.x + TILE, p.y + r); ctx.stroke(); }
     paint(ctx, 22, '#7f7f7f', 0.2);                 // gravel
 
+    // cactus
+    p = paint(ctx, 23, '#3f7d3a', 0.12);
+    ctx.strokeStyle = shade('#3f7d3a', -0.3);
+    ctx.strokeRect(p.x + 4, p.y + 1, TILE - 8, TILE - 2);
+    // furnace side (stone) + front (with opening)
+    paint(ctx, 24, '#6f6f6f', 0.14);
+    p = paint(ctx, 25, '#6f6f6f', 0.14);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(p.x + TILE * 0.28, p.y + TILE * 0.45, TILE * 0.44, TILE * 0.4);
+    ctx.fillStyle = '#ff8a2a';
+    ctx.fillRect(p.x + TILE * 0.34, p.y + TILE * 0.62, TILE * 0.32, TILE * 0.18);
+    // apple
+    ctx.clearRect((26 % ATLAS_TILES) * TILE, ((26 / ATLAS_TILES) | 0) * TILE, TILE, TILE);
+    p = fillTile(ctx, 26);
+    ctx.fillStyle = '#d83030';
+    ctx.beginPath(); ctx.arc(p.x + TILE / 2, p.y + TILE * 0.56, TILE * 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#6b4f2a'; ctx.fillRect(p.x + TILE * 0.48, p.y + TILE * 0.2, 3, TILE * 0.2);
+    // raw + cooked meat
+    ctx.clearRect((27 % ATLAS_TILES) * TILE, ((27 / ATLAS_TILES) | 0) * TILE, TILE, TILE);
+    p = fillTile(ctx, 27);
+    ctx.fillStyle = '#e07a8a'; ctx.fillRect(p.x + TILE * 0.2, p.y + TILE * 0.3, TILE * 0.6, TILE * 0.4);
+    ctx.clearRect((28 % ATLAS_TILES) * TILE, ((28 / ATLAS_TILES) | 0) * TILE, TILE, TILE);
+    p = fillTile(ctx, 28);
+    ctx.fillStyle = '#8a5a32'; ctx.fillRect(p.x + TILE * 0.2, p.y + TILE * 0.3, TILE * 0.6, TILE * 0.4);
+    // iron + gold ingots
+    ctx.clearRect((29 % ATLAS_TILES) * TILE, ((29 / ATLAS_TILES) | 0) * TILE, TILE, TILE);
+    p = fillTile(ctx, 29);
+    ctx.fillStyle = '#d8d8e0'; ctx.fillRect(p.x + TILE * 0.22, p.y + TILE * 0.4, TILE * 0.56, TILE * 0.22);
+    ctx.clearRect((30 % ATLAS_TILES) * TILE, ((30 / ATLAS_TILES) | 0) * TILE, TILE, TILE);
+    p = fillTile(ctx, 30);
+    ctx.fillStyle = '#ffd84d'; ctx.fillRect(p.x + TILE * 0.22, p.y + TILE * 0.4, TILE * 0.56, TILE * 0.22);
+    // bread
+    ctx.clearRect((31 % ATLAS_TILES) * TILE, ((31 / ATLAS_TILES) | 0) * TILE, TILE, TILE);
+    p = fillTile(ctx, 31);
+    ctx.fillStyle = '#c98a3a';
+    ctx.beginPath(); ctx.ellipse(p.x + TILE / 2, p.y + TILE / 2, TILE * 0.34, TILE * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+
     return canvas;
   }
 
@@ -161,9 +211,14 @@
     isSolid: (id) => DEFS[id] && DEFS[id].solid,
     isOpaque: (id) => DEFS[id] && !DEFS[id].transparent && id !== ID.AIR,
     isLiquid: (id) => DEFS[id] && DEFS[id].liquid === true,
-    /** Placeable items shown in creative inventory order. */
+    /** True for carried-only items (food, ingots) that can't be placed as blocks. */
+    isItem: (id) => !!(DEFS[id] && DEFS[id].item),
+    /** True for edible items. */
+    isFood: (id) => !!(DEFS[id] && DEFS[id].food),
+    /** Placeable blocks shown in creative inventory order. */
     placeable: [ID.GRASS, ID.DIRT, ID.STONE, ID.COBBLE, ID.SAND, ID.WOOD, ID.PLANK,
       ID.LEAVES, ID.GLASS, ID.BRICK, ID.SNOW, ID.GRAVEL, ID.WATER, ID.TORCH,
-      ID.CRAFTING, ID.COAL, ID.IRON, ID.GOLD, ID.DIAMOND],
+      ID.CRAFTING, ID.FURNACE, ID.CACTUS, ID.COAL, ID.IRON, ID.GOLD, ID.DIAMOND,
+      ID.APPLE, ID.COOKED_MEAT, ID.IRON_INGOT, ID.GOLD_INGOT, ID.BREAD],
   };
 })(typeof window !== 'undefined' ? window : this);

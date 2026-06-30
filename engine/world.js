@@ -13,6 +13,19 @@
 
   const SEA_LEVEL = 48;
 
+  /**
+   * Biome definitions. `surface`/`sub` are block ids; `treeChance` controls tree
+   * density per column; `cactus` enables desert cacti.
+   */
+  const BIOMES = {
+    plains: { name: 'Plains', surface: ID.GRASS, sub: ID.DIRT, treeChance: 0.012, cactus: false },
+    forest: { name: 'Forest', surface: ID.GRASS, sub: ID.DIRT, treeChance: 0.08, cactus: false },
+    desert: { name: 'Desert', surface: ID.SAND, sub: ID.SAND, treeChance: 0, cactus: true },
+    tundra: { name: 'Tundra', surface: ID.SNOW, sub: ID.DIRT, treeChance: 0.01, cactus: false },
+    snowyPeaks: { name: 'Snowy Peaks', surface: ID.SNOW, sub: ID.STONE, treeChance: 0.004, cactus: false },
+    peaks: { name: 'Mountain Peaks', surface: ID.STONE, sub: ID.STONE, treeChance: 0, cactus: false },
+  };
+
   class World {
     /** @param {number} seed terrain seed */
     constructor(seed = 20260630) {
@@ -74,26 +87,45 @@
       return Math.max(2, Math.min(SIZE_Y - 4, Math.floor(h)));
     }
 
+    /**
+     * Classify the biome at a world column. Combines a temperature and a humidity
+     * noise field into a discrete biome with surface/subsurface block choices.
+     * @returns {{name,temp,surface,sub,treeChance,cactus}}
+     */
+    biomeAt(x, z, h) {
+      const temp = this.biome.fbm2(x * 0.0032, z * 0.0032, 3);            // -1..1 cold..hot
+      const humid = this.biome.fbm2(x * 0.0036 + 500, z * 0.0036 - 500, 3);
+      const mountainous = h > SEA_LEVEL + 30;
+
+      // Most terrain noise lives within roughly ±0.2, so thresholds are modest.
+      if (mountainous && temp < 0.0) return BIOMES.snowyPeaks;
+      if (h > SEA_LEVEL + 46) return BIOMES.peaks;
+      if (temp < -0.16) return BIOMES.tundra;
+      if (temp > 0.14 && humid < 0.02) return BIOMES.desert;
+      if (humid > 0.1) return BIOMES.forest;
+      return BIOMES.plains;
+    }
+
     /** Generate (fill) a chunk's block data. */
     generate(chunk) {
       const ox = chunk.cx * SIZE_X, oz = chunk.cz * SIZE_Z;
+      chunk.biomeName = null;
       for (let lz = 0; lz < SIZE_Z; lz++) {
         for (let lx = 0; lx < SIZE_X; lx++) {
           const wx = ox + lx, wz = oz + lz;
           const h = this.surfaceHeight(wx, wz);
-          const biomeVal = this.biome.fbm2(wx * 0.004, wz * 0.004, 2); // -1..1
-          const cold = h > SEA_LEVEL + 34 || biomeVal < -0.45;
           const beach = h <= SEA_LEVEL + 1 && h >= SEA_LEVEL - 2;
+          const biome = this.biomeAt(wx, wz, h);
+          if (lx === 8 && lz === 8) chunk.biomeName = biome.name;
 
           for (let y = 0; y <= Math.max(h, SEA_LEVEL); y++) {
             let id = ID.AIR;
             if (y === 0) id = ID.BEDROCK;
             else if (y < h - 4) id = ID.STONE;
-            else if (y < h) id = beach ? ID.SAND : ID.DIRT;
+            else if (y < h) id = beach ? ID.SAND : biome.sub;
             else if (y === h) {
               if (beach) id = ID.SAND;
-              else if (cold) id = ID.SNOW;
-              else id = ID.GRASS;
+              else id = biome.surface;
             } else if (y <= SEA_LEVEL) id = ID.WATER;
 
             // Carve caves with 3D noise (not above surface, keep crust).
@@ -125,19 +157,32 @@
       return ID.STONE;
     }
 
-    /** Scatter trees on grass surfaces within the chunk. */
+    /** Scatter biome-appropriate vegetation (trees / cacti) within the chunk. */
     _trees(chunk) {
       const ox = chunk.cx * SIZE_X, oz = chunk.cz * SIZE_Z;
       const rng = mulberry(chunk.cx * 73856093 ^ chunk.cz * 19349663 ^ this.seed);
       for (let lz = 2; lz < SIZE_Z - 2; lz++) {
         for (let lx = 2; lx < SIZE_X - 2; lx++) {
-          if (rng() > 0.02) continue;
           const wx = ox + lx, wz = oz + lz;
           const h = this.surfaceHeight(wx, wz);
           if (h <= SEA_LEVEL) continue;
-          if (chunk.get(lx, h, lz) !== ID.GRASS) continue;
+          const biome = this.biomeAt(wx, wz, h);
+          const surf = chunk.get(lx, h, lz);
+          if (biome.cactus && surf === ID.SAND) {
+            if (rng() < 0.02) this._placeCactus(chunk, lx, h + 1, lz, 2 + ((rng() * 3) | 0));
+            continue;
+          }
+          if (biome.treeChance <= 0 || rng() > biome.treeChance) continue;
+          if (surf !== ID.GRASS) continue;
           this._placeTree(chunk, lx, h + 1, lz, 4 + ((rng() * 3) | 0));
         }
+      }
+    }
+
+    /** Build a desert cactus column. */
+    _placeCactus(chunk, x, y, z, height) {
+      for (let i = 0; i < height; i++) {
+        if (y + i < SIZE_Y) chunk.set(x, y + i, z, ID.CACTUS);
       }
     }
 
