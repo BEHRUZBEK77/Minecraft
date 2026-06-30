@@ -1,0 +1,169 @@
+/**
+ * block.js — Block registry, properties, and a procedurally generated texture atlas.
+ * No external image assets: textures are painted onto a canvas at runtime so the
+ * game runs by simply opening index.html. Exposes global `MC.Blocks`.
+ */
+(function (global) {
+  'use strict';
+  const MC = (global.MC = global.MC || {});
+
+  // Numeric block IDs. 0 is always air.
+  const ID = {
+    AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SAND: 4, WATER: 5, WOOD: 6,
+    LEAVES: 7, SNOW: 8, BEDROCK: 9, GLASS: 10, PLANK: 11, COBBLE: 12,
+    COAL: 13, IRON: 14, GOLD: 15, DIAMOND: 16, TORCH: 17, CRAFTING: 18,
+    BRICK: 19, GRAVEL: 20,
+  };
+
+  // Atlas is a grid of ATLAS_TILES x ATLAS_TILES tiles, each TILE px square.
+  const ATLAS_TILES = 8;
+  const TILE = 32;
+
+  /**
+   * Block definition table.
+   * tiles: [top, side, bottom] atlas indices (index = row*ATLAS_TILES + col).
+   * solid: participates in collision; transparent: doesn't cull neighbor faces.
+   */
+  const DEFS = {};
+  function def(id, opts) { DEFS[id] = Object.assign({ id, solid: true, transparent: false, light: 0, hardness: 1 }, opts); }
+
+  def(ID.AIR, { name: 'Air', solid: false, transparent: true, hardness: 0, tiles: [-1, -1, -1] });
+  def(ID.GRASS, { name: 'Grass', tiles: [0, 1, 2], drop: ID.DIRT });
+  def(ID.DIRT, { name: 'Dirt', tiles: [2, 2, 2] });
+  def(ID.STONE, { name: 'Stone', tiles: [3, 3, 3], hardness: 2.5, drop: ID.COBBLE });
+  def(ID.SAND, { name: 'Sand', tiles: [4, 4, 4] });
+  def(ID.WATER, { name: 'Water', solid: false, transparent: true, liquid: true, hardness: 999, tiles: [5, 5, 5] });
+  def(ID.WOOD, { name: 'Wood', tiles: [6, 7, 6], hardness: 2 });
+  def(ID.LEAVES, { name: 'Leaves', transparent: true, tiles: [8, 8, 8], hardness: 0.3 });
+  def(ID.SNOW, { name: 'Snow', tiles: [9, 9, 9] });
+  def(ID.BEDROCK, { name: 'Bedrock', hardness: 999, tiles: [10, 10, 10] });
+  def(ID.GLASS, { name: 'Glass', transparent: true, tiles: [11, 11, 11], hardness: 0.3 });
+  def(ID.PLANK, { name: 'Planks', tiles: [12, 12, 12], hardness: 2 });
+  def(ID.COBBLE, { name: 'Cobblestone', tiles: [13, 13, 13], hardness: 2.5 });
+  def(ID.COAL, { name: 'Coal Ore', tiles: [14, 14, 14], hardness: 3, drop: ID.COAL });
+  def(ID.IRON, { name: 'Iron Ore', tiles: [15, 15, 15], hardness: 3, drop: ID.IRON });
+  def(ID.GOLD, { name: 'Gold Ore', tiles: [16, 16, 16], hardness: 3, drop: ID.GOLD });
+  def(ID.DIAMOND, { name: 'Diamond Ore', tiles: [17, 17, 17], hardness: 4, drop: ID.DIAMOND });
+  def(ID.TORCH, { name: 'Torch', solid: false, transparent: true, light: 14, tiles: [18, 18, 18], hardness: 0.1 });
+  def(ID.CRAFTING, { name: 'Crafting Table', tiles: [19, 20, 12], hardness: 2 });
+  def(ID.BRICK, { name: 'Bricks', tiles: [21, 21, 21], hardness: 2.5 });
+  def(ID.GRAVEL, { name: 'Gravel', tiles: [22, 22, 22], hardness: 1.2 });
+
+  /** Painter helpers operating on a 2D canvas context for one tile. */
+  function fillTile(ctx, idx, base) {
+    const col = idx % ATLAS_TILES, row = (idx / ATLAS_TILES) | 0;
+    return { x: col * TILE, y: row * TILE, base };
+  }
+
+  /** Add deterministic per-pixel speckle to give textures grain. */
+  function speckle(ctx, x, y, base, amount, density = 0.5) {
+    for (let py = 0; py < TILE; py++) {
+      for (let px = 0; px < TILE; px++) {
+        if (Math.random() > density) continue;
+        const d = (Math.random() - 0.5) * amount;
+        ctx.fillStyle = shade(base, d);
+        ctx.fillRect(x + px, y + py, 1, 1);
+      }
+    }
+  }
+
+  /** Shade a hex color by delta (-1..1). */
+  function shade(hex, d) {
+    const n = parseInt(hex.slice(1), 16);
+    let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const a = Math.round(d * 255);
+    r = Math.max(0, Math.min(255, r + a));
+    g = Math.max(0, Math.min(255, g + a));
+    b = Math.max(0, Math.min(255, b + a));
+    return `rgb(${r},${g},${b})`;
+  }
+
+  /** Paint a single solid-color tile with speckle grain. */
+  function paint(ctx, idx, color, grain = 0.12) {
+    const col = idx % ATLAS_TILES, row = (idx / ATLAS_TILES) | 0;
+    const x = col * TILE, y = row * TILE;
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, TILE, TILE);
+    speckle(ctx, x, y, color, grain, 0.7);
+    return { x, y };
+  }
+
+  /** Build the full atlas canvas and return it (also returns UV helper data). */
+  function buildAtlas() {
+    const size = ATLAS_TILES * TILE;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, size, size);
+
+    paint(ctx, 0, '#5fa133', 0.14);                 // grass top
+    // grass side: dirt with green lip
+    let p = paint(ctx, 1, '#8a6240', 0.14);
+    ctx.fillStyle = '#5fa133';
+    ctx.fillRect(p.x, p.y, TILE, TILE * 0.28);
+    speckle(ctx, p.x, p.y, '#5fa133', 0.12, 0.5);
+    paint(ctx, 2, '#8a6240', 0.14);                 // dirt
+    paint(ctx, 3, '#888888', 0.1);                  // stone
+    paint(ctx, 4, '#e0d39a', 0.1);                  // sand
+    paint(ctx, 5, '#3a6ee0', 0.06);                 // water
+    paint(ctx, 6, '#6b4f2a', 0.12);                 // wood top (rings)
+    p = paint(ctx, 7, '#7a5a32', 0.1);              // wood side
+    ctx.strokeStyle = shade('#7a5a32', -0.15);
+    for (let i = 4; i < TILE; i += 7) { ctx.beginPath(); ctx.moveTo(p.x + i, p.y); ctx.lineTo(p.x + i, p.y + TILE); ctx.stroke(); }
+    paint(ctx, 8, '#2f7d2f', 0.2);                  // leaves
+    paint(ctx, 9, '#f4f7fb', 0.06);                 // snow
+    paint(ctx, 10, '#2b2b2b', 0.12);                // bedrock
+    // glass: light frame
+    p = fillTile(ctx, 11);
+    ctx.clearRect((11 % ATLAS_TILES) * TILE, ((11 / ATLAS_TILES) | 0) * TILE, TILE, TILE);
+    ctx.strokeStyle = 'rgba(220,240,255,0.9)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect((11 % ATLAS_TILES) * TILE + 1, ((11 / ATLAS_TILES) | 0) * TILE + 1, TILE - 2, TILE - 2);
+    ctx.lineWidth = 1;
+    paint(ctx, 12, '#b9905a', 0.1);                 // planks
+    p = paint(ctx, 13, '#9a9a9a', 0.16);            // cobble
+    // ores: stone base with colored flecks
+    const ore = (idx, c) => { paint(ctx, idx, '#888888', 0.1); const o = fillTile(ctx, idx); for (let i = 0; i < 12; i++) { ctx.fillStyle = c; ctx.fillRect(o.x + (Math.random() * TILE) | 0, o.y + (Math.random() * TILE) | 0, 3, 3); } };
+    ore(14, '#1c1c1c'); ore(15, '#d8a06a'); ore(16, '#ffd84d'); ore(17, '#62e8e0');
+    // torch
+    ctx.clearRect((18 % ATLAS_TILES) * TILE, ((18 / ATLAS_TILES) | 0) * TILE, TILE, TILE);
+    p = fillTile(ctx, 18);
+    ctx.fillStyle = '#7a5a32';
+    ctx.fillRect(p.x + TILE * 0.42, p.y + TILE * 0.35, TILE * 0.16, TILE * 0.6);
+    ctx.fillStyle = '#ffd24d';
+    ctx.fillRect(p.x + TILE * 0.38, p.y + TILE * 0.18, TILE * 0.24, TILE * 0.22);
+    paint(ctx, 19, '#7a5a32', 0.1);                 // crafting top
+    p = paint(ctx, 20, '#b9905a', 0.1);             // crafting side
+    ctx.strokeStyle = shade('#b9905a', -0.25);
+    ctx.strokeRect(p.x + 4, p.y + 4, TILE - 8, TILE - 8);
+    // bricks
+    p = paint(ctx, 21, '#a8452f', 0.08);
+    ctx.strokeStyle = shade('#a8452f', -0.3);
+    for (let r = 0; r < TILE; r += 8) { ctx.beginPath(); ctx.moveTo(p.x, p.y + r); ctx.lineTo(p.x + TILE, p.y + r); ctx.stroke(); }
+    paint(ctx, 22, '#7f7f7f', 0.2);                 // gravel
+
+    return canvas;
+  }
+
+  /** Compute UV rect for a tile index. Returns [u0,v0,u1,v1] in 0..1. */
+  function tileUV(idx) {
+    const col = idx % ATLAS_TILES, row = (idx / ATLAS_TILES) | 0;
+    const s = 1 / ATLAS_TILES;
+    // small inset to avoid texture bleeding between tiles
+    const pad = 0.001;
+    return [col * s + pad, row * s + pad, (col + 1) * s - pad, (row + 1) * s - pad];
+  }
+
+  MC.Blocks = {
+    ID, DEFS, ATLAS_TILES, TILE, buildAtlas, tileUV,
+    get: (id) => DEFS[id] || DEFS[ID.AIR],
+    isSolid: (id) => DEFS[id] && DEFS[id].solid,
+    isOpaque: (id) => DEFS[id] && !DEFS[id].transparent && id !== ID.AIR,
+    isLiquid: (id) => DEFS[id] && DEFS[id].liquid === true,
+    /** Placeable items shown in creative inventory order. */
+    placeable: [ID.GRASS, ID.DIRT, ID.STONE, ID.COBBLE, ID.SAND, ID.WOOD, ID.PLANK,
+      ID.LEAVES, ID.GLASS, ID.BRICK, ID.SNOW, ID.GRAVEL, ID.WATER, ID.TORCH,
+      ID.CRAFTING, ID.COAL, ID.IRON, ID.GOLD, ID.DIAMOND],
+  };
+})(typeof window !== 'undefined' ? window : this);

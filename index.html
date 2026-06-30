@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>VoxelCraft — a browser voxel game</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- WebGL world canvas -->
+  <canvas id="gl"></canvas>
+  <!-- 2D overlay for rain/snow/particles -->
+  <canvas id="fx"></canvas>
+
+  <!-- Crosshair -->
+  <div id="crosshair">+</div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="topbar">
+      <span id="fps">0 FPS</span>
+      <span id="clock">☀ 06:00</span>
+      <span id="coords">X 0 Y 0 Z 0</span>
+    </div>
+    <div id="debug" style="display:none"></div>
+
+    <div id="statbars">
+      <div id="health" class="bar"></div>
+      <div id="hunger" class="bar"></div>
+    </div>
+    <div id="hotbar"></div>
+  </div>
+
+  <!-- Inventory + crafting overlay -->
+  <div id="inventory" class="overlay" style="display:none">
+    <div class="panel inv-panel">
+      <h2>Inventory</h2>
+      <div id="craftArea">
+        <div class="craft-row">
+          <div id="craftGrid" class="craft-grid size-2"></div>
+          <div class="arrow">➜</div>
+          <div id="craftResult" class="result"></div>
+        </div>
+        <p class="hint">Click items into the grid to craft. Right-click a Crafting Table for 3×3.</p>
+      </div>
+      <h3>Storage</h3>
+      <div id="invGrid" class="grid"></div>
+      <h3>Hotbar</h3>
+      <div id="hotbarGrid" class="grid"></div>
+      <p class="hint">Click a stack to pick it up, click again to drop. Press E or ESC to close.</p>
+    </div>
+  </div>
+
+  <!-- Main menu -->
+  <div id="mainMenu" class="overlay menu" style="display:none">
+    <div class="panel center">
+      <h1>VoxelCraft</h1>
+      <p class="sub">An infinite voxel world — built from scratch with WebGL</p>
+      <button id="btnContinue" class="btn" style="display:none">Continue</button>
+      <button id="btnNewSurvival" class="btn">New World — Survival</button>
+      <button id="btnNewCreative" class="btn">New World — Creative</button>
+      <div class="controls">
+        <strong>Controls</strong><br />
+        WASD move · Space jump · Shift run/down · Mouse look<br />
+        Left click break/attack · Right click place/use · Wheel select<br />
+        1–9 hotbar · E inventory · F fly · F3 debug · ESC menu
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause menu -->
+  <div id="pauseMenu" class="overlay menu" style="display:none">
+    <div class="panel center">
+      <h1>Paused</h1>
+      <button id="btnResume" class="btn">Resume</button>
+      <button id="btnSaveQuit" class="btn">Save &amp; Quit</button>
+    </div>
+  </div>
+
+  <!-- Death screen -->
+  <div id="deathScreen" class="overlay menu" style="display:none">
+    <div class="panel center">
+      <h1 style="color:#b33">You Died</h1>
+      <button id="btnRespawn" class="btn">Respawn</button>
+    </div>
+  </div>
+
+  <!-- Loading screen -->
+  <div id="loading" class="overlay menu" style="display:none">
+    <div class="panel center">
+      <h1>Loading</h1>
+      <div class="progress"><div id="loadingBar"></div></div>
+      <p id="loadingText">Generating world...</p>
+    </div>
+  </div>
+
+  <!-- Engine modules (classic scripts, ordered by dependency; runs from file://) -->
+  <script src="engine/math.js"></script>
+  <script src="engine/noise.js"></script>
+  <script src="engine/block.js"></script>
+  <script src="engine/camera.js"></script>
+  <script src="engine/input.js"></script>
+  <script src="shaders/voxel.glsl.js"></script>
+  <script src="engine/renderer.js"></script>
+  <script src="engine/chunk.js"></script>
+  <script src="engine/lighting.js"></script>
+  <script src="engine/mesher.js"></script>
+  <script src="engine/greedyMesher.js"></script>
+  <script src="engine/world.js"></script>
+  <script src="engine/chunkManager.js"></script>
+  <script src="engine/collision.js"></script>
+  <script src="engine/physics.js"></script>
+  <script src="entities/player.js"></script>
+  <script src="entities/mob.js"></script>
+  <script src="entities/animal.js"></script>
+  <script src="entities/zombie.js"></script>
+  <script src="inventory.js"></script>
+  <script src="crafting.js"></script>
+  <script src="save.js"></script>
+  <script src="audio.js"></script>
+  <script src="ui.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
